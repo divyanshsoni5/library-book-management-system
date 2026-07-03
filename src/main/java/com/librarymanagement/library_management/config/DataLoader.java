@@ -18,8 +18,8 @@ public class DataLoader implements CommandLineRunner {
     private final BookIssueRepository bookIssueRepository;
 
     public DataLoader(UserRepository userRepository,
-                      BookRepository bookRepository,
-                      BookIssueRepository bookIssueRepository) {
+            BookRepository bookRepository,
+            BookIssueRepository bookIssueRepository) {
         this.userRepository = userRepository;
         this.bookRepository = bookRepository;
         this.bookIssueRepository = bookIssueRepository;
@@ -40,7 +40,7 @@ public class DataLoader implements CommandLineRunner {
         // 2. Create Books
         Book book1 = bookRepository.save(new Book("The Great Gatsby", "F. Scott Fitzgerald", "9780743273565"));
         Book book2 = bookRepository.save(new Book("To Kill a Mockingbird", "Harper Lee", "9780061120084"));
-        
+
         // Create an issued book
         Book book3 = new Book("1984", "George Orwell", "9780451524935");
         book3.setAvailable(false);
@@ -54,7 +54,8 @@ public class DataLoader implements CommandLineRunner {
         book4 = bookRepository.save(book4);
 
         // 3. Create active issues
-        // Issue book3 to student1, issued 20 days ago (due date was 6 days ago, resulting in a 6 rupee fine)
+        // Issue book3 to student1, issued 20 days ago (due date was 6 days ago,
+        // resulting in a 6 rupee fine)
         LocalDate issueDate = LocalDate.now().minusDays(20);
         LocalDate dueDate = issueDate.plusDays(14);
         BookIssue issue = new BookIssue(book3.getId(), student1.getId(), issueDate, dueDate);
