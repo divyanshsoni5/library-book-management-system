@@ -30,8 +30,8 @@ public class LibraryController {
     private final BookIssueRepository bookIssueRepository;
 
     public LibraryController(UserRepository userRepository,
-                             BookRepository bookRepository,
-                             BookIssueRepository bookIssueRepository) {
+            BookRepository bookRepository,
+            BookIssueRepository bookIssueRepository) {
         this.userRepository = userRepository;
         this.bookRepository = bookRepository;
         this.bookIssueRepository = bookIssueRepository;
@@ -56,9 +56,7 @@ public class LibraryController {
         }
     }
 
-    // ==========================================
     // STUDENT ENDPOINTS
-    // ==========================================
 
     @GetMapping("/student/books")
     public ResponseEntity<List<Book>> getBooksForStudent(
@@ -66,7 +64,7 @@ public class LibraryController {
             @RequestHeader(value = "X-User-Id", required = false) Long userId,
             @RequestParam(value = "search", required = false) String search) {
         validateStudent(role, userId);
-        
+
         List<Book> books;
         if (search != null && !search.trim().isEmpty()) {
             books = bookRepository.searchBooks(search.trim());
@@ -75,7 +73,6 @@ public class LibraryController {
         }
         return ResponseEntity.ok(books);
     }
-
 
     @GetMapping("/student/dashboard")
     public ResponseEntity<StudentDashboardDto> getStudentDashboard(
@@ -89,7 +86,7 @@ public class LibraryController {
             try {
                 referenceDate = LocalDate.parse(simulatedDateStr.trim());
             } catch (DateTimeParseException e) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, 
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                         "Invalid date format for simulatedDate. Use YYYY-MM-DD.");
             }
         }
@@ -119,8 +116,7 @@ public class LibraryController {
                     issue.getIssueDate(),
                     issue.getDueDate(),
                     daysOverdue,
-                    fine
-            ));
+                    fine));
         }
 
         StudentDashboardDto dashboard = new StudentDashboardDto(
@@ -128,15 +124,12 @@ public class LibraryController {
                 student.getUsername(),
                 activeIssues.size(),
                 totalFine,
-                issuedBookDetails
-        );
+                issuedBookDetails);
 
         return ResponseEntity.ok(dashboard);
     }
 
-    // ==========================================
     // LIBRARIAN ENDPOINTS
-    // ==========================================
 
     @PostMapping("/librarian/issues")
     public ResponseEntity<BookIssue> issueBookForStudent(
@@ -160,7 +153,6 @@ public class LibraryController {
                     "Book is not available for issue. Current tag: " + book.getTag());
         }
 
-        // Complete the issue transactions
         book.setAvailable(false);
         book.setTag("ISSUED");
         bookRepository.save(book);
@@ -226,8 +218,8 @@ public class LibraryController {
         validateLibrarian(role);
 
         if (book.getTitle() == null || book.getTitle().trim().isEmpty() ||
-            book.getAuthor() == null || book.getAuthor().trim().isEmpty() ||
-            book.getIsbn() == null || book.getIsbn().trim().isEmpty()) {
+                book.getAuthor() == null || book.getAuthor().trim().isEmpty() ||
+                book.getIsbn() == null || book.getIsbn().trim().isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Book title, author, and ISBN are required.");
         }
 
@@ -252,8 +244,10 @@ public class LibraryController {
         Book book = bookRepository.findById(bookId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Book not found."));
 
-        // If a book is currently issued, librarian should not delete it directly without issuing/returning state handling.
-        // But for simplicity, we allow deleting and cleaning up any active issues if they exist.
+        // If a book is currently issued, librarian should not delete it directly
+        // without issuing/returning state handling.
+        // But for simplicity, we allow deleting and cleaning up any active issues if
+        // they exist.
         bookRepository.delete(book);
         return ResponseEntity.noContent().build();
     }
