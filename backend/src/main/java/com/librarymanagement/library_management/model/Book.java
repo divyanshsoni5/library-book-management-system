@@ -24,6 +24,12 @@ public class Book {
     @Column(nullable = false)
     private String tag = "AVAILABLE"; // "AVAILABLE", "ISSUED", "UNAVAILABLE"
 
+    private String category = "General";
+
+    private Integer quantity = 1;
+
+    private Integer availableCopies = 1;
+
     public Book() {}
 
     public Book(String title, String author, String isbn) {
@@ -32,6 +38,20 @@ public class Book {
         this.isbn = isbn;
         this.available = true;
         this.tag = "AVAILABLE";
+        this.category = "General";
+        this.quantity = 1;
+        this.availableCopies = 1;
+    }
+
+    public Book(String title, String author, String isbn, String category, Integer quantity) {
+        this.title = title;
+        this.author = author;
+        this.isbn = isbn;
+        this.category = category != null ? category : "General";
+        this.quantity = quantity != null ? quantity : 1;
+        this.availableCopies = this.quantity;
+        this.available = this.quantity > 0;
+        this.tag = this.quantity > 0 ? "AVAILABLE" : "UNAVAILABLE";
     }
 
     public Long getId() {
@@ -80,5 +100,29 @@ public class Book {
 
     public void setTag(String tag) {
         this.tag = tag;
+    }
+
+    public String getCategory() {
+        return category;
+    }
+
+    public void setCategory(String category) {
+        this.category = category;
+    }
+
+    public Integer getQuantity() {
+        return quantity;
+    }
+
+    public void setQuantity(Integer quantity) {
+        this.quantity = quantity;
+    }
+
+    public Integer getAvailableCopies() {
+        return availableCopies;
+    }
+
+    public void setAvailableCopies(Integer availableCopies) {
+        this.availableCopies = availableCopies;
     }
 }

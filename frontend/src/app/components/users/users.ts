@@ -1,6 +1,7 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject, signal, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { HttpErrorResponse } from '@angular/common/http';
 import { UserService } from '../../services/user.service';
 import { User } from '../../models/models';
 
@@ -22,9 +23,11 @@ interface UserForm {
 export class UsersComponent {
   userService = inject(UserService);
   currentUser = this.userService.currentUser;
+  private cdr = inject(ChangeDetectorRef);
 
   // Modal controls
   isModalOpen = false;
+  errorMessage = '';
   
   // Form model
   userForm: UserForm = {
@@ -46,6 +49,7 @@ export class UsersComponent {
   }
 
   resetForm(): void {
+    this.errorMessage = '';
     this.userForm = {
       name: '',
       email: '',
@@ -65,6 +69,7 @@ export class UsersComponent {
 
   onSubmit(): void {
     if (!this.userForm.name.trim()) return;
+    this.errorMessage = '';
 
     // Apply college specific email formats dynamically
     const nameLower = this.userForm.name.trim().toLowerCase().replace(/\s+/g, '_');
@@ -95,13 +100,31 @@ export class UsersComponent {
       password: finalPassword
     };
 
-    this.userService.addUser(newUserPayload);
-    this.closeModal();
+    this.userService.addUser(newUserPayload).subscribe({
+      next: () => {
+        this.closeModal();
+      },
+      error: (err: HttpErrorResponse) => {
+        if (err.error && err.error.message) {
+          this.errorMessage = err.error.message;
+        } else {
+          this.errorMessage = err.message || 'Failed to enroll member.';
+        }
+        this.cdr.detectChanges();
+      }
+    });
   }
 
   onDeleteUser(id: string): void {
     if (confirm('Are you sure you want to remove this library member?')) {
-      this.userService.deleteUser(id);
+      this.userService.deleteUser(id).subscribe({
+        next: () => {
+          this.cdr.detectChanges();
+        },
+        error: (err) => {
+          console.error('Delete user failed', err);
+        }
+      });
     }
   }
 }

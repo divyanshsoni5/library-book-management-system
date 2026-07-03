@@ -1,7 +1,7 @@
 import { Injectable, signal, inject, effect } from '@angular/core';
 import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
-import { catchError, map } from 'rxjs/operators';
-import { of } from 'rxjs';
+import { catchError, map, switchMap } from 'rxjs/operators';
+import { of, Observable, throwError } from 'rxjs';
 import { Book } from '../models/models';
 import { UserService } from './user.service';
 
@@ -49,25 +49,32 @@ export class BookService {
    * Librarians use the dedicated /api/librarian/books endpoint (with LIBRARIAN headers).
    * Students/Teachers use /api/student/books (with STUDENT headers).
    */
-  refreshBooks(): void {
+  getBooksObservable(): Observable<Book[]> {
     const currentUser = this.userService.currentUser();
-    if (!currentUser) return;
+    if (!currentUser) return of([]);
 
     const isLibrarian = currentUser.role === 'Librarian';
 
     const headers = new HttpHeaders()
-      .set('X-User-Role', isLibrarian ? 'LIBRARIAN' : 'STUDENT')
+      .set('X-User-Role', currentUser.role.toUpperCase())
       .set('X-User-Id', currentUser.id);
 
     const url = isLibrarian ? '/api/librarian/books' : '/api/student/books';
 
-    this.http.get<any[]>(url, { headers }).pipe(
+    return this.http.get<any[]>(url, { headers }).pipe(
       map(books => books.map(b => this.mapBackendBook(b))),
       catchError(err => {
         console.error('Failed to load books from backend REST API', err);
         return of([]);
       })
-    ).subscribe(books => {
+    );
+  }
+
+  /**
+   * Students/Teachers use /api/student/books (with STUDENT headers).
+   */
+  refreshBooks(): void {
+    this.getBooksObservable().subscribe(books => {
       this.booksSignal.set(books);
     });
   }
@@ -75,46 +82,70 @@ export class BookService {
   /**
    * Add a new book to the library via the backend.
    */
-  addBook(bookData: Omit<Book, 'id' | 'availableCopies'>): void {
-    const headers = new HttpHeaders().set('X-User-Role', 'LIBRARIAN');
+  addBook(bookData: Omit<Book, 'id' | 'availableCopies'>): Observable<Book[]> {
+    const headers = new HttpHeaders()
+      .set('X-User-Role', 'LIBRARIAN')
+      .set('X-User-Id', this.userService.currentUser()?.id || '');
 
     const body = {
       title: bookData.title,
       author: bookData.author,
-      isbn: bookData.isbn
+      isbn: bookData.isbn,
+      category: bookData.category,
+      quantity: bookData.quantity
     };
 
-    this.http.post<any>('/api/librarian/books', body, { headers }).subscribe({
-      next: () => this.refreshBooks(),
-      error: err => console.error('Failed to add book via backend', err)
-    });
+    return this.http.post<any>('/api/librarian/books', body, { headers }).pipe(
+      switchMap(() => this.getBooksObservable()),
+      map(books => {
+        this.booksSignal.set(books);
+        return books;
+      }),
+      catchError(err => {
+        console.error('Failed to add book via backend', err);
+        return throwError(() => err);
+      })
+    );
   }
 
   /**
-   * Update a book's availability status.
+   * Update a book's general details.
    */
-  updateBook(updatedBook: Book): void {
-    const headers = new HttpHeaders().set('X-User-Role', 'LIBRARIAN');
-    const isAvailable = updatedBook.availableCopies > 0;
+  updateBook(updatedBook: Book): Observable<Book[]> {
+    const headers = new HttpHeaders()
+      .set('X-User-Role', 'LIBRARIAN')
+      .set('X-User-Id', this.userService.currentUser()?.id || '');
 
-    const params = new HttpParams().set('available', String(isAvailable));
-
-    this.http.put<any>(`/api/librarian/books/${updatedBook.id}/availability`, null, { headers, params }).subscribe({
-      next: () => this.refreshBooks(),
-      error: err => console.error('Failed to update book availability via backend', err)
-    });
+    return this.http.put<any>(`/api/librarian/books/${updatedBook.id}`, updatedBook, { headers }).pipe(
+      switchMap(() => this.getBooksObservable()),
+      map(books => {
+        this.booksSignal.set(books);
+        return books;
+      }),
+      catchError(err => {
+        console.error('Failed to update book via backend', err);
+        return throwError(() => err);
+      })
+    );
   }
 
   /**
    * Delete a book from the backend.
    */
-  deleteBook(id: string): void {
+  deleteBook(id: string): Observable<Book[]> {
     const headers = new HttpHeaders().set('X-User-Role', 'LIBRARIAN');
 
-    this.http.delete<void>(`/api/librarian/books/${id}`, { headers }).subscribe({
-      next: () => this.refreshBooks(),
-      error: err => console.error('Failed to delete book via backend', err)
-    });
+    return this.http.delete<void>(`/api/librarian/books/${id}`, { headers }).pipe(
+      switchMap(() => this.getBooksObservable()),
+      map(books => {
+        this.booksSignal.set(books);
+        return books;
+      }),
+      catchError(err => {
+        console.error('Failed to delete book via backend', err);
+        return throwError(() => err);
+      })
+    );
   }
 
   /**

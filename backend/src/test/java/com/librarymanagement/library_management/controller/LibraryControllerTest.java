@@ -128,17 +128,17 @@ public class LibraryControllerTest {
                 .andExpect(jsonPath("$.booksIssuedCount", is(1)))
                 .andExpect(jsonPath("$.totalFine", is(0.0)));
 
-        // Check dashboard with simulated date (20 days from now, which is 6 days past the 14-day limit) -> fine should be 6.0
-        LocalDate simulatedDate = LocalDate.now().plusDays(20);
+        // Check dashboard with simulated date (40 days from now, which is 10 days past the 30-day limit) -> fine should be 10.0
+        LocalDate simulatedDate = LocalDate.now().plusDays(40);
         mockMvc.perform(get("/api/student/dashboard")
                 .header("X-User-Role", "STUDENT")
                 .header("X-User-Id", student.getId())
                 .param("simulatedDate", simulatedDate.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.booksIssuedCount", is(1)))
-                .andExpect(jsonPath("$.totalFine", is(6.0)))
-                .andExpect(jsonPath("$.issuedBooks[0].daysOverdue", is(6)))
-                .andExpect(jsonPath("$.issuedBooks[0].fine", is(6.0)));
+                .andExpect(jsonPath("$.totalFine", is(10.0)))
+                .andExpect(jsonPath("$.issuedBooks[0].daysOverdue", is(10)))
+                .andExpect(jsonPath("$.issuedBooks[0].fine", is(10.0)));
     }
 
     @Test
