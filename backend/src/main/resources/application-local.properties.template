@@ -1,0 +1,8 @@
+# Template for local database credentials.
+# Copy this file to 'application-local.properties' and fill in your Clever Cloud MySQL credentials.
+# DO NOT commit your actual 'application-local.properties' file to Git.
+
+# Replace <HOST>, <PORT>, <DATABASE>, <USERNAME>, and <PASSWORD> with your Clever Cloud details
+spring.datasource.url=jdbc:mysql://<HOST>:<PORT>/<DATABASE>?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+spring.datasource.username=<USERNAME>
+spring.datasource.password=<PASSWORD>

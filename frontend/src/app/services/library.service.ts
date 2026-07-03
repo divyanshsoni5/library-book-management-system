@@ -1,7 +1,7 @@
 import { Injectable, signal, computed, inject, effect } from '@angular/core';
 import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
 import { Observable, of } from 'rxjs';
-import { map, catchError, tap } from 'rxjs/operators';
+import { map, catchError } from 'rxjs/operators';
 import { BookService } from './book.service';
 import { UserService } from './user.service';
 import { IssuedBook } from '../models/models';
@@ -14,6 +14,7 @@ export class LibraryService {
   private bookService = inject(BookService);
   private userService = inject(UserService);
 
+  // Writable signal for issued books
   private issuedBooksSignal = signal<IssuedBook[]>([]);
   issuedBooks = this.issuedBooksSignal.asReadonly();
 
@@ -31,7 +32,7 @@ export class LibraryService {
   });
 
   constructor() {
-    // Automatically load issue records when the user changes
+    // Automatically load data when user logs in/out
     effect(() => {
       const user = this.userService.currentUser();
       if (user) {
@@ -43,59 +44,79 @@ export class LibraryService {
   }
 
   /**
-   * Fetch active / past issued records from backend.
+   * Refresh the list of issued books.
+   * If a student is logged in, fetches from student dashboard.
+   * If a librarian is logged in, fetches all issues.
    */
   refreshIssuedBooks(): void {
-    const currentUser = this.userService.currentUser();
-    if (!currentUser) return;
+    const user = this.userService.currentUser();
+    if (!user) return;
+
+    if (user.role === 'Librarian') {
+      this.refreshLibrarianIssues();
+    } else {
+      this.refreshStudentDashboard();
+    }
+  }
+
+  /**
+   * Fetch active issues and fines for student from the backend dashboard API.
+   */
+  private refreshStudentDashboard(): void {
+    const user = this.userService.currentUser();
+    if (!user) return;
 
     const headers = new HttpHeaders()
-      .set('X-User-Role', currentUser.role === 'Librarian' ? 'LIBRARIAN' : 'STUDENT')
-      .set('X-User-Id', currentUser.id);
+      .set('X-User-Role', 'STUDENT')
+      .set('X-User-Id', user.id);
 
-    if (currentUser.role === 'Librarian') {
-      this.http.get<any[]>('/api/librarian/issues', { headers }).pipe(
-        map(issues => issues.map(issue => ({
-          id: `issue-${issue.id}`,
-          userId: `${issue.studentId}`,
-          bookId: `${issue.bookId}`,
-          issueDate: issue.issueDate,
-          dueDate: issue.dueDate,
-          returnDate: issue.returnDate || undefined,
-          finePaid: issue.returnDate ? true : false,
-          fineAmount: 0 // calculated in frontend or returned
-        }))),
-        catchError(err => {
-          console.error('Failed to load librarian issues', err);
-          return of([]);
-        })
-      ).subscribe(mappedIssues => {
-        this.issuedBooksSignal.set(mappedIssues);
-      });
-    } else {
-      // Student dashboard returns DTO with list of active issued books
-      this.http.get<any>('/api/student/dashboard', { headers }).pipe(
-        map(dto => {
-          if (!dto || !dto.issuedBooks) return [];
-          return dto.issuedBooks.map((detail: any) => ({
-            id: `issue-student-${detail.bookId}`,
-            userId: currentUser.id,
-            bookId: `${detail.bookId}`,
-            issueDate: detail.issueDate,
-            dueDate: detail.dueDate,
-            returnDate: undefined,
-            finePaid: false,
-            fineAmount: detail.fine
-          }));
-        }),
-        catchError(err => {
-          console.error('Failed to load student issues', err);
-          return of([]);
-        })
-      ).subscribe(mappedIssues => {
-        this.issuedBooksSignal.set(mappedIssues);
-      });
-    }
+    this.http.get<any>('/api/student/dashboard', { headers }).pipe(
+      map(dto => {
+        if (!dto || !dto.issuedBooks) return [];
+        return dto.issuedBooks.map((detail: any) => ({
+          id: `issue-student-${detail.bookId}`,
+          userId: user.id,
+          bookId: `${detail.bookId}`,
+          issueDate: detail.issueDate,
+          dueDate: detail.dueDate,
+          returnDate: undefined,
+          finePaid: detail.fine === 0,
+          fineAmount: detail.fine
+        }));
+      }),
+      catchError(err => {
+        console.error('Failed to load student dashboard from backend', err);
+        return of([]);
+      })
+    ).subscribe(mappedIssues => {
+      this.issuedBooksSignal.set(mappedIssues);
+    });
+  }
+
+  /**
+   * Fetch all global issues from the backend (for Librarian view).
+   */
+  private refreshLibrarianIssues(): void {
+    const headers = new HttpHeaders().set('X-User-Role', 'LIBRARIAN');
+
+    this.http.get<any[]>('/api/librarian/issues', { headers }).pipe(
+      map(issues => issues.map(issue => ({
+        id: `issue-${issue.id}`,
+        userId: `${issue.studentId}`,
+        bookId: `${issue.bookId}`,
+        issueDate: issue.issueDate,
+        dueDate: issue.dueDate,
+        returnDate: issue.returnDate || undefined,
+        finePaid: issue.returnDate ? true : false,
+        fineAmount: 0
+      }))),
+      catchError(err => {
+        console.warn('Failed to load global issued books from backend /api/librarian/issues.', err);
+        return of([]);
+      })
+    ).subscribe(mappedIssues => {
+      this.issuedBooksSignal.set(mappedIssues);
+    });
   }
 
   /**
@@ -111,7 +132,7 @@ export class LibraryService {
     if (diffTime < 0) return 0;
 
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-    // Since backend uses simple rule: 1 rupee per day after due date (which is 14 days after issue date)
+    // 1 rupee per day after due date (14 days from issue)
     const overdueDays = diffDays - 14;
     return overdueDays > 0 ? overdueDays * 1.0 : 0;
   }
@@ -135,11 +156,10 @@ export class LibraryService {
   }
 
   /**
-   * Issue a book to a user.
+   * Issue a book to a user via the backend REST API.
    */
   issueBook(userId: string, bookId: string, issueDateStr: string): Observable<boolean> {
-    const headers = new HttpHeaders()
-      .set('X-User-Role', 'LIBRARIAN');
+    const headers = new HttpHeaders().set('X-User-Role', 'LIBRARIAN');
 
     const params = new HttpParams()
       .set('studentId', userId)
@@ -165,8 +185,7 @@ export class LibraryService {
    * Return an issued book and record fine collection if applicable.
    */
   returnBook(record: IssuedBook, collectFine: boolean): Observable<boolean> {
-    const headers = new HttpHeaders()
-      .set('X-User-Role', 'LIBRARIAN');
+    const headers = new HttpHeaders().set('X-User-Role', 'LIBRARIAN');
 
     const params = new HttpParams()
       .set('studentId', record.userId)

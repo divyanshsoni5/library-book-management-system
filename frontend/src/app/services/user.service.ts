@@ -1,7 +1,7 @@
 import { Injectable, signal, inject } from '@angular/core';
 import { HttpClient, HttpParams, HttpHeaders } from '@angular/common/http';
 import { Observable, of, throwError } from 'rxjs';
-import { map, catchError, tap } from 'rxjs/operators';
+import { map, catchError } from 'rxjs/operators';
 import { User } from '../models/models';
 
 @Injectable({
@@ -10,7 +10,7 @@ import { User } from '../models/models';
 export class UserService {
   private readonly USER_STORAGE_KEY = 'lms_current_user';
   private http = inject(HttpClient);
-  
+
   private usersSignal = signal<User[]>([]);
   users = this.usersSignal.asReadonly();
 
@@ -52,7 +52,7 @@ export class UserService {
   }
 
   /**
-   * Login as a Student or Librarian.
+   * Login as a Student, Teacher, or Librarian via backend REST API.
    */
   login(role: 'Student' | 'Teacher' | 'Librarian', identifier: string): Observable<boolean> {
     // Since backend role is either STUDENT or LIBRARIAN, map Teacher/Student to STUDENT
@@ -115,6 +115,41 @@ export class UserService {
       })
     ).subscribe(mappedUsers => {
       this.usersSignal.set(mappedUsers);
+    });
+  }
+
+  /**
+   * Add a new user via API (Librarian only).
+   */
+  addUser(userData: Omit<User, 'id'>): void {
+    const headers = { 'X-User-Role': 'LIBRARIAN' };
+    const backendUser = {
+      username: userData.name,
+      role: userData.role.toUpperCase()
+    };
+
+    this.http.post<any>('/api/librarian/users', backendUser, { headers }).subscribe({
+      next: () => { this.refreshUsers(); },
+      error: (err) => {
+        console.warn('Backend POST /api/librarian/users not implemented yet. Adding user to local state.', err);
+        const nextId = String(Math.max(...this.usersSignal().map(u => Number(u.id) || 0), 0) + 1);
+        this.usersSignal.set([...this.usersSignal(), { ...userData, id: nextId }]);
+      }
+    });
+  }
+
+  /**
+   * Delete a user via API (Librarian only).
+   */
+  deleteUser(id: string): void {
+    const headers = { 'X-User-Role': 'LIBRARIAN' };
+
+    this.http.delete<void>(`/api/librarian/users/${id}`, { headers }).subscribe({
+      next: () => { this.refreshUsers(); },
+      error: (err) => {
+        console.warn(`Backend DELETE /api/librarian/users/${id} not implemented. Deleting from local state.`, err);
+        this.usersSignal.set(this.usersSignal().filter(u => u.id !== id));
+      }
     });
   }
 

@@ -12,11 +12,14 @@ export class BookService {
   private http = inject(HttpClient);
   private userService = inject(UserService);
 
+  // Writable signal holding the state of books
   private booksSignal = signal<Book[]>([]);
+
+  // Exposed read-only signal for components to consume
   books = this.booksSignal.asReadonly();
 
   constructor() {
-    // Automatically fetch books when the current user changes (e.g. login)
+    // Automatically refresh book list whenever the current logged-in user changes
     effect(() => {
       const user = this.userService.currentUser();
       if (user) {
@@ -29,13 +32,15 @@ export class BookService {
 
   private mapBackendBook(backendBook: any): Book {
     return {
-      id: `${backendBook.id}`,
+      id: String(backendBook.id),
       title: backendBook.title,
       author: backendBook.author,
-      category: 'General',
+      category: backendBook.category || 'General',
       isbn: backendBook.isbn,
-      quantity: 1,
-      availableCopies: backendBook.available ? 1 : 0
+      quantity: backendBook.quantity !== undefined ? backendBook.quantity : 1,
+      availableCopies: backendBook.availableCopies !== undefined
+        ? backendBook.availableCopies
+        : (backendBook.available ? 1 : 0)
     };
   }
 
@@ -59,7 +64,7 @@ export class BookService {
     this.http.get<any[]>(url, { headers }).pipe(
       map(books => books.map(b => this.mapBackendBook(b))),
       catchError(err => {
-        console.error('Failed to fetch books', err);
+        console.error('Failed to load books from backend REST API', err);
         return of([]);
       })
     ).subscribe(books => {
@@ -68,14 +73,10 @@ export class BookService {
   }
 
   /**
-   * Add a new book.
+   * Add a new book to the library via the backend.
    */
   addBook(bookData: Omit<Book, 'id' | 'availableCopies'>): void {
-    const currentUser = this.userService.currentUser();
-    if (!currentUser) return;
-
-    const headers = new HttpHeaders()
-      .set('X-User-Role', 'LIBRARIAN');
+    const headers = new HttpHeaders().set('X-User-Role', 'LIBRARIAN');
 
     const body = {
       title: bookData.title,
@@ -85,47 +86,39 @@ export class BookService {
 
     this.http.post<any>('/api/librarian/books', body, { headers }).subscribe({
       next: () => this.refreshBooks(),
-      error: err => console.error('Failed to add book', err)
+      error: err => console.error('Failed to add book via backend', err)
     });
   }
 
   /**
-   * Update an existing book's availability.
+   * Update a book's availability status.
    */
   updateBook(updatedBook: Book): void {
-    const currentUser = this.userService.currentUser();
-    if (!currentUser) return;
+    const headers = new HttpHeaders().set('X-User-Role', 'LIBRARIAN');
+    const isAvailable = updatedBook.availableCopies > 0;
 
-    const headers = new HttpHeaders()
-      .set('X-User-Role', 'LIBRARIAN');
-
-    const params = new HttpParams()
-      .set('available', updatedBook.availableCopies > 0 ? 'true' : 'false');
+    const params = new HttpParams().set('available', String(isAvailable));
 
     this.http.put<any>(`/api/librarian/books/${updatedBook.id}/availability`, null, { headers, params }).subscribe({
       next: () => this.refreshBooks(),
-      error: err => console.error('Failed to update book availability', err)
+      error: err => console.error('Failed to update book availability via backend', err)
     });
   }
 
   /**
-   * Delete a book.
+   * Delete a book from the backend.
    */
   deleteBook(id: string): void {
-    const currentUser = this.userService.currentUser();
-    if (!currentUser) return;
-
-    const headers = new HttpHeaders()
-      .set('X-User-Role', 'LIBRARIAN');
+    const headers = new HttpHeaders().set('X-User-Role', 'LIBRARIAN');
 
     this.http.delete<void>(`/api/librarian/books/${id}`, { headers }).subscribe({
       next: () => this.refreshBooks(),
-      error: err => console.error('Failed to delete book', err)
+      error: err => console.error('Failed to delete book via backend', err)
     });
   }
 
   /**
-   * Helper (kept for compatibility, though backend updates availability directly).
+   * Triggered when a book transaction is completed — refreshes the book list.
    */
   updateAvailableCopies(id: string, change: number): boolean {
     const currentBooks = this.booksSignal();
