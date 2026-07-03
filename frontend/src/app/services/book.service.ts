@@ -1,5 +1,7 @@
 import { Injectable, signal, inject, effect } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
+import { catchError, map } from 'rxjs/operators';
+import { of } from 'rxjs';
 import { Book } from '../models/models';
 import { UserService } from './user.service';
 
@@ -25,41 +27,48 @@ export class BookService {
       } else {
         this.booksSignal.set([]);
       }
-    });
+    }, { allowSignalWrites: true });
+  }
+
+  private mapBackendBook(backendBook: any): Book {
+    return {
+      id: String(backendBook.id),
+      title: backendBook.title,
+      author: backendBook.author,
+      category: backendBook.category || 'General',
+      isbn: backendBook.isbn,
+      quantity: backendBook.quantity !== undefined ? backendBook.quantity : 1,
+      availableCopies: backendBook.availableCopies !== undefined
+        ? backendBook.availableCopies
+        : (backendBook.available ? 1 : 0)
+    };
   }
 
   /**
-   * Fetch all books from the backend.
-   * Maps missing properties like category and quantity with safe fallbacks until the backend is fully updated.
+   * Load books from the backend.
+   * Librarians use the dedicated /api/librarian/books endpoint (with LIBRARIAN headers).
+   * Students/Teachers use /api/student/books (with STUDENT headers).
    */
   refreshBooks(): void {
-    const user = this.userService.currentUser();
-    if (!user) return;
+    const currentUser = this.userService.currentUser();
+    if (!currentUser) return;
 
-    const role = user.role.toUpperCase();
-    const headers = {
-      // Workaround: GET /api/student/books requires student role. We pass student headers
-      // so the librarian view can list books without throwing 403.
-      'X-User-Role': role === 'LIBRARIAN' ? 'STUDENT' : role,
-      'X-User-Id': role === 'LIBRARIAN' ? '2' : user.id
-    };
+    const isLibrarian = currentUser.role === 'Librarian';
 
-    this.http.get<any[]>('/api/student/books', { headers }).subscribe({
-      next: (data) => {
-        const mappedBooks: Book[] = data.map(b => ({
-          id: String(b.id),
-          title: b.title,
-          author: b.author,
-          isbn: b.isbn,
-          category: b.category || 'General',
-          quantity: b.quantity !== undefined ? b.quantity : 1,
-          availableCopies: b.availableCopies !== undefined ? b.availableCopies : (b.available ? 1 : 0)
-        }));
-        this.booksSignal.set(mappedBooks);
-      },
-      error: (err) => {
+    const headers = new HttpHeaders()
+      .set('X-User-Role', isLibrarian ? 'LIBRARIAN' : 'STUDENT')
+      .set('X-User-Id', currentUser.id);
+
+    const url = isLibrarian ? '/api/librarian/books' : '/api/student/books';
+
+    this.http.get<any[]>(url, { headers }).pipe(
+      map(books => books.map(b => this.mapBackendBook(b))),
+      catchError(err => {
         console.error('Failed to load books from backend REST API', err);
-      }
+        return of([]);
+      })
+    ).subscribe(books => {
+      this.booksSignal.set(books);
     });
   }
 
@@ -67,17 +76,17 @@ export class BookService {
    * Add a new book to the library via the backend.
    */
   addBook(bookData: Omit<Book, 'id' | 'availableCopies'>): void {
-    const headers = {
-      'X-User-Role': 'LIBRARIAN'
+    const headers = new HttpHeaders().set('X-User-Role', 'LIBRARIAN');
+
+    const body = {
+      title: bookData.title,
+      author: bookData.author,
+      isbn: bookData.isbn
     };
-    
-    this.http.post<any>('/api/librarian/books', bookData, { headers }).subscribe({
-      next: () => {
-        this.refreshBooks();
-      },
-      error: (err) => {
-        console.error('Failed to add book via backend', err);
-      }
+
+    this.http.post<any>('/api/librarian/books', body, { headers }).subscribe({
+      next: () => this.refreshBooks(),
+      error: err => console.error('Failed to add book via backend', err)
     });
   }
 
@@ -85,21 +94,14 @@ export class BookService {
    * Update a book's availability status.
    */
   updateBook(updatedBook: Book): void {
-    const headers = {
-      'X-User-Role': 'LIBRARIAN'
-    };
+    const headers = new HttpHeaders().set('X-User-Role', 'LIBRARIAN');
     const isAvailable = updatedBook.availableCopies > 0;
 
-    this.http.put<any>(`/api/librarian/books/${updatedBook.id}/availability`, null, {
-      headers,
-      params: { available: String(isAvailable) }
-    }).subscribe({
-      next: () => {
-        this.refreshBooks();
-      },
-      error: (err) => {
-        console.error('Failed to update book availability via backend', err);
-      }
+    const params = new HttpParams().set('available', String(isAvailable));
+
+    this.http.put<any>(`/api/librarian/books/${updatedBook.id}/availability`, null, { headers, params }).subscribe({
+      next: () => this.refreshBooks(),
+      error: err => console.error('Failed to update book availability via backend', err)
     });
   }
 
@@ -107,25 +109,27 @@ export class BookService {
    * Delete a book from the backend.
    */
   deleteBook(id: string): void {
-    const headers = {
-      'X-User-Role': 'LIBRARIAN'
-    };
+    const headers = new HttpHeaders().set('X-User-Role', 'LIBRARIAN');
 
     this.http.delete<void>(`/api/librarian/books/${id}`, { headers }).subscribe({
-      next: () => {
-        this.refreshBooks();
-      },
-      error: (err) => {
-        console.error('Failed to delete book via backend', err);
-      }
+      next: () => this.refreshBooks(),
+      error: err => console.error('Failed to delete book via backend', err)
     });
   }
 
   /**
-   * Triggered when book transaction is completed.
+   * Triggered when a book transaction is completed — refreshes the book list.
    */
   updateAvailableCopies(id: string, change: number): boolean {
-    this.refreshBooks();
-    return true;
+    const currentBooks = this.booksSignal();
+    const book = currentBooks.find(b => b.id === id);
+    if (book) {
+      this.updateBook({
+        ...book,
+        availableCopies: Math.max(0, book.availableCopies + change)
+      });
+      return true;
+    }
+    return false;
   }
 }

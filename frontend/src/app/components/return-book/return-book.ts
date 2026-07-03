@@ -87,10 +87,11 @@ export class ReturnBookComponent {
    */
   confirmReturn(collectFine: boolean): void {
     if (this.selectedRecord) {
-      const success = this.libraryService.returnBook(this.selectedRecord.id, collectFine);
-      if (success) {
-        this.closeModal();
-      }
+      this.libraryService.returnBook(this.selectedRecord, collectFine).subscribe(success => {
+        if (success) {
+          this.closeModal();
+        }
+      });
     }
   }
 }

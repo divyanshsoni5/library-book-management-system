@@ -23,6 +23,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api")
+@CrossOrigin(origins = "*", allowedHeaders = "*")
 public class LibraryController {
 
     private final UserRepository userRepository;
@@ -131,6 +132,12 @@ public class LibraryController {
 
     // LIBRARIAN ENDPOINTS
 
+    @GetMapping("/librarian/issues")
+    public ResponseEntity<List<BookIssue>> getAllIssues(@RequestHeader(value = "X-User-Role", required = false) String role) {
+        validateLibrarian(role);
+        return ResponseEntity.ok(bookIssueRepository.findAll());
+    }
+
     @PostMapping("/librarian/issues")
     public ResponseEntity<BookIssue> issueBookForStudent(
             @RequestHeader(value = "X-User-Role", required = false) String role,
@@ -211,6 +218,20 @@ public class LibraryController {
         return ResponseEntity.ok(response);
     }
 
+    @GetMapping("/librarian/books")
+    public ResponseEntity<List<Book>> getAllBooksForLibrarian(
+            @RequestHeader(value = "X-User-Role", required = false) String role,
+            @RequestParam(value = "search", required = false) String search) {
+        validateLibrarian(role);
+        List<Book> books;
+        if (search != null && !search.trim().isEmpty()) {
+            books = bookRepository.searchBooks(search.trim());
+        } else {
+            books = bookRepository.findAll();
+        }
+        return ResponseEntity.ok(books);
+    }
+
     @PostMapping("/librarian/books")
     public ResponseEntity<Book> addBook(
             @RequestHeader(value = "X-User-Role", required = false) String role,
@@ -273,5 +294,35 @@ public class LibraryController {
 
         Book updatedBook = bookRepository.save(book);
         return ResponseEntity.ok(updatedBook);
+    }
+
+    @PostMapping("/users/login")
+    public ResponseEntity<User> login(@RequestParam String username, @RequestParam String role) {
+        java.util.Optional<User> existing = userRepository.findByUsername(username.trim());
+        if (existing.isPresent()) {
+            User user = existing.get();
+            if (user.getRole().equalsIgnoreCase(role.trim())) {
+                return ResponseEntity.ok(user);
+            } else {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Role mismatch");
+            }
+        }
+        // Auto-create student if not exists
+        if ("STUDENT".equalsIgnoreCase(role.trim())) {
+            User newUser = userRepository.save(new User(username.trim(), "STUDENT"));
+            return ResponseEntity.ok(newUser);
+        }
+        // Auto-create librarian for testing/ease of use if it's librarian1
+        if ("LIBRARIAN".equalsIgnoreCase(role.trim()) && "librarian1".equalsIgnoreCase(username.trim())) {
+            User newUser = userRepository.save(new User("librarian1", "LIBRARIAN"));
+            return ResponseEntity.ok(newUser);
+        }
+        throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found.");
+    }
+
+    @GetMapping("/librarian/users")
+    public ResponseEntity<List<User>> getAllUsers(@RequestHeader(value = "X-User-Role", required = false) String role) {
+        validateLibrarian(role);
+        return ResponseEntity.ok(userRepository.findAll());
     }
 }
