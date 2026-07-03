@@ -1,4 +1,5 @@
-import { Injectable, signal, computed, inject } from '@angular/core';
+import { Injectable, signal, computed, inject, effect } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
 import { BookService } from './book.service';
 import { UserService } from './user.service';
 import { IssuedBook } from '../models/models';
@@ -7,48 +8,12 @@ import { IssuedBook } from '../models/models';
   providedIn: 'root'
 })
 export class LibraryService {
-  private readonly STORAGE_KEY = 'lms_issued_books';
-  
   private bookService = inject(BookService);
   private userService = inject(UserService);
-
-  // Default mock issued books
-  // Given today is 2026-07-03:
-  // 1. book-1 (The Great Gatsby) issued to user-1 (Aarav Sharma) on 2026-06-25 (8 days ago) -> fine: 0 rs
-  // 2. book-2 (To Kill a Mockingbird) issued to user-2 (Priya Patel) on 2026-05-15 (49 days ago) -> fine: 19 rs (49 - 30)
-  // 3. book-3 (A Brief History of Time) issued to user-1 (Aarav Sharma) on 2026-03-01 (124 days ago) -> fine: 230 rs (60 + 34 * 5)
-  private readonly defaultIssuedBooks: IssuedBook[] = [
-    {
-      id: 'issue-1',
-      userId: 'user-1',
-      bookId: 'book-1',
-      issueDate: '2026-06-25',
-      dueDate: '2026-07-25',
-      finePaid: false,
-      fineAmount: 0
-    },
-    {
-      id: 'issue-2',
-      userId: 'user-2',
-      bookId: 'book-2',
-      issueDate: '2026-05-15',
-      dueDate: '2026-06-15',
-      finePaid: false,
-      fineAmount: 0
-    },
-    {
-      id: 'issue-3',
-      userId: 'user-1',
-      bookId: 'book-3',
-      issueDate: '2026-03-01',
-      dueDate: '2026-04-01',
-      finePaid: false,
-      fineAmount: 0
-    }
-  ];
+  private http = inject(HttpClient);
 
   // Writable signal for issued books
-  private issuedBooksSignal = signal<IssuedBook[]>(this.loadIssuedBooks());
+  private issuedBooksSignal = signal<IssuedBook[]>([]);
   issuedBooks = this.issuedBooksSignal.asReadonly();
 
   // Dynamic computed statistics for Librarian header dashboard
@@ -64,31 +29,94 @@ export class LibraryService {
     return this.bookService.books().reduce((sum, b) => sum + (b.quantity - b.availableCopies), 0);
   });
 
-  constructor() {}
-
-  /**
-   * Load issued books from localStorage or use default mock data.
-   */
-  private loadIssuedBooks(): IssuedBook[] {
-    const data = localStorage.getItem(this.STORAGE_KEY);
-    if (data) {
-      try {
-        return JSON.parse(data);
-      } catch (e) {
-        console.error('Failed to parse issued books', e);
+  constructor() {
+    // Automatically load data when user logs in/out
+    effect(() => {
+      const user = this.userService.currentUser();
+      if (user) {
+        this.refreshIssuedBooks();
+      } else {
+        this.issuedBooksSignal.set([]);
       }
-    }
-    // Initialize defaults in localStorage
-    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.defaultIssuedBooks));
-    return this.defaultIssuedBooks;
+    });
   }
 
   /**
-   * Save current issued books signal value to localStorage.
+   * Refresh the list of issued books. 
+   * If a student is logged in, fetches from student dashboard.
+   * If a librarian is logged in, fetches all issues.
    */
-  private saveIssuedBooks(records: IssuedBook[]): void {
-    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(records));
-    this.issuedBooksSignal.set(records);
+  refreshIssuedBooks(): void {
+    const user = this.userService.currentUser();
+    if (!user) return;
+
+    if (user.role.toUpperCase() === 'STUDENT') {
+      this.refreshDashboard();
+    } else {
+      this.refreshLibrarianIssues();
+    }
+  }
+
+  /**
+   * Fetch active issues and fines for student from the backend dashboard API.
+   */
+  private refreshDashboard(): void {
+    const user = this.userService.currentUser();
+    if (!user) return;
+
+    const headers = {
+      'X-User-Role': 'STUDENT',
+      'X-User-Id': user.id
+    };
+
+    this.http.get<any>('/api/student/dashboard', { headers }).subscribe({
+      next: (dashboard) => {
+        if (dashboard && dashboard.issuedBooks) {
+          const mappedIssues: IssuedBook[] = dashboard.issuedBooks.map((item: any) => ({
+            id: `issue-${item.bookId}-${item.issueDate}`,
+            userId: user.id,
+            bookId: String(item.bookId),
+            issueDate: item.issueDate,
+            dueDate: item.dueDate,
+            finePaid: item.fine === 0,
+            fineAmount: item.fine
+          }));
+          this.issuedBooksSignal.set(mappedIssues);
+        }
+      },
+      error: (err) => {
+        console.error('Failed to load student dashboard from backend', err);
+      }
+    });
+  }
+
+  /**
+   * Fetch all global issues from the backend (for Librarian view).
+   */
+  private refreshLibrarianIssues(): void {
+    const headers = {
+      'X-User-Role': 'LIBRARIAN'
+    };
+
+    this.http.get<any[]>('/api/librarian/issues', { headers }).subscribe({
+      next: (data) => {
+        const mappedIssues: IssuedBook[] = data.map(ib => ({
+          id: String(ib.id),
+          userId: String(ib.studentId),
+          bookId: String(ib.bookId),
+          issueDate: ib.issueDate,
+          dueDate: ib.dueDate,
+          returnDate: ib.returnDate || undefined,
+          finePaid: ib.returnDate ? true : false,
+          fineAmount: 0 // To be dynamically calculated or provided by backend
+        }));
+        this.issuedBooksSignal.set(mappedIssues);
+      },
+      error: (err) => {
+        console.warn('Failed to load global issued books from backend /api/librarian/issues. Using empty local state until endpoint is ready.', err);
+        this.issuedBooksSignal.set([]);
+      }
+    });
   }
 
   /**
@@ -99,16 +127,13 @@ export class LibraryService {
    */
   calculateFine(issueDateStr: string, returnDateStr?: string): number {
     const issueDate = new Date(issueDateStr);
-    
-    // Use target return date or today's date if not returned yet
     const endDate = returnDateStr ? new Date(returnDateStr) : new Date();
     
-    // Clear time parts for accurate day calculations
     issueDate.setHours(0, 0, 0, 0);
     endDate.setHours(0, 0, 0, 0);
     
     const diffTime = endDate.getTime() - issueDate.getTime();
-    if (diffTime < 0) return 0; // Guard against date issues
+    if (diffTime < 0) return 0;
     
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
     
@@ -140,71 +165,61 @@ export class LibraryService {
   }
 
   /**
-   * Issue a book to a user.
+   * Issue a book to a user via the backend REST API.
    */
   issueBook(userId: string, bookId: string, issueDateStr: string): boolean {
-    const book = this.bookService.books().find(b => b.id === bookId);
-    
-    if (!book || book.availableCopies <= 0) {
-      return false; // Book not available
-    }
-
-    // Calculate due date (default: 1 month after issue date)
-    const issueDate = new Date(issueDateStr);
-    const dueDate = new Date(issueDate);
-    dueDate.setMonth(issueDate.getMonth() + 1);
-    const dueDateStr = dueDate.toISOString().split('T')[0];
-
-    const newIssue: IssuedBook = {
-      id: `issue-${Date.now()}`,
-      userId,
-      bookId,
-      issueDate: issueDateStr,
-      dueDate: dueDateStr,
-      finePaid: false,
-      fineAmount: 0
+    const headers = {
+      'X-User-Role': 'LIBRARIAN'
     };
 
-    // Decrement available copies in book service
-    const success = this.bookService.updateAvailableCopies(bookId, -1);
-    
-    if (success) {
-      const updated = [...this.issuedBooksSignal(), newIssue];
-      this.saveIssuedBooks(updated);
-      return true;
-    }
-    
-    return false;
+    this.http.post<any>('/api/librarian/issues', null, {
+      headers,
+      params: {
+        studentId: userId,
+        bookId: bookId
+      }
+    }).subscribe({
+      next: (res) => {
+        console.log('Book issued successfully in backend database', res);
+        this.bookService.refreshBooks();
+        this.refreshIssuedBooks();
+      },
+      error: (err) => {
+        console.error('Failed to issue book in backend database', err);
+      }
+    });
+
+    return true;
   }
 
   /**
-   * Return an issued book and record fine collection if applicable.
+   * Return an issued book via the backend REST API.
    */
   returnBook(issueId: string, collectFine: boolean): boolean {
-    const records = this.issuedBooksSignal();
-    const index = records.findIndex(r => r.id === issueId);
+    const record = this.issuedBooks().find(r => r.id === issueId);
     
-    if (index !== -1 && !records[index].returnDate) {
-      const record = records[index];
-      const todayStr = new Date().toISOString().split('T')[0];
-      const calculatedFine = this.calculateFine(record.issueDate, todayStr);
-      
-      const updatedRecord: IssuedBook = {
-        ...record,
-        returnDate: todayStr,
-        finePaid: collectFine ? true : (calculatedFine === 0),
-        fineAmount: calculatedFine
+    if (record && !record.returnDate) {
+      const headers = {
+        'X-User-Role': 'LIBRARIAN'
       };
 
-      // Increment available copies in book service
-      const success = this.bookService.updateAvailableCopies(record.bookId, 1);
-      
-      if (success) {
-        const updated = [...records];
-        updated[index] = updatedRecord;
-        this.saveIssuedBooks(updated);
-        return true;
-      }
+      this.http.post<any>('/api/librarian/returns', null, {
+        headers,
+        params: {
+          studentId: record.userId,
+          bookId: record.bookId
+        }
+      }).subscribe({
+        next: (res) => {
+          console.log('Book returned successfully in backend database', res);
+          this.bookService.refreshBooks();
+          this.refreshIssuedBooks();
+        },
+        error: (err) => {
+          console.error('Failed to return book in backend database', err);
+        }
+      });
+      return true;
     }
     
     return false;
