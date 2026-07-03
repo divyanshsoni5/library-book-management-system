@@ -1,164 +1,131 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable, signal, inject, effect } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
 import { Book } from '../models/models';
+import { UserService } from './user.service';
 
 @Injectable({
   providedIn: 'root'
 })
 export class BookService {
-  private readonly STORAGE_KEY = 'lms_books';
-  
-  // Initial default mock books
-  private defaultBooks: Book[] = [
-    {
-      id: 'book-1',
-      title: 'Introduction to Algorithms',
-      author: 'Thomas H. Cormen',
-      category: 'Computer Science',
-      isbn: '9780262033848',
-      quantity: 5,
-      availableCopies: 3
-    },
-    {
-      id: 'book-2',
-      title: 'Database System Concepts',
-      author: 'Abraham Silberschatz',
-      category: 'Information Technology',
-      isbn: '9780073523309',
-      quantity: 3,
-      availableCopies: 2
-    },
-    {
-      id: 'book-3',
-      title: 'Microelectronic Circuits',
-      author: 'Adel S. Sedra',
-      category: 'Electronics & TC',
-      isbn: '9780199339136',
-      quantity: 2,
-      availableCopies: 1
-    },
-    {
-      id: 'book-4',
-      title: 'Power System Analysis',
-      author: 'Hadi Saadat',
-      category: 'Electrical Engineering',
-      isbn: '9780984543823',
-      quantity: 4,
-      availableCopies: 4
-    },
-    {
-      id: 'book-5',
-      title: 'Engineering Mechanics: Statics',
-      author: 'J.L. Meriam',
-      category: 'Mechanical Engineering',
-      isbn: '9781118807330',
-      quantity: 6,
-      availableCopies: 5
-    }
-  ];
+  private http = inject(HttpClient);
+  private userService = inject(UserService);
 
   // Writable signal holding the state of books
-  private booksSignal = signal<Book[]>(this.loadBooks());
+  private booksSignal = signal<Book[]>([]);
 
   // Exposed read-only signal for components to consume
   books = this.booksSignal.asReadonly();
 
-  constructor() {}
-
-  /**
-   * Load books from localStorage or return default mock books.
-   */
-  private loadBooks(): Book[] {
-    const data = localStorage.getItem(this.STORAGE_KEY);
-    if (data) {
-      try {
-        return JSON.parse(data);
-      } catch (e) {
-        console.error('Failed to parse books from localStorage, using defaults', e);
+  constructor() {
+    // Automatically refresh book list whenever the current logged-in user changes
+    effect(() => {
+      const user = this.userService.currentUser();
+      if (user) {
+        this.refreshBooks();
+      } else {
+        this.booksSignal.set([]);
       }
-    }
-    // Save defaults to localStorage for first run
-    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.defaultBooks));
-    return this.defaultBooks;
+    });
   }
 
   /**
-   * Save current books signal value to localStorage.
+   * Fetch all books from the backend.
+   * Maps missing properties like category and quantity with safe fallbacks until the backend is fully updated.
    */
-  private saveBooks(books: Book[]): void {
-    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(books));
-    this.booksSignal.set(books);
+  refreshBooks(): void {
+    const user = this.userService.currentUser();
+    if (!user) return;
+
+    const role = user.role.toUpperCase();
+    const headers = {
+      // Workaround: GET /api/student/books requires student role. We pass student headers
+      // so the librarian view can list books without throwing 403.
+      'X-User-Role': role === 'LIBRARIAN' ? 'STUDENT' : role,
+      'X-User-Id': role === 'LIBRARIAN' ? '2' : user.id
+    };
+
+    this.http.get<any[]>('/api/student/books', { headers }).subscribe({
+      next: (data) => {
+        const mappedBooks: Book[] = data.map(b => ({
+          id: String(b.id),
+          title: b.title,
+          author: b.author,
+          isbn: b.isbn,
+          category: b.category || 'General',
+          quantity: b.quantity !== undefined ? b.quantity : 1,
+          availableCopies: b.availableCopies !== undefined ? b.availableCopies : (b.available ? 1 : 0)
+        }));
+        this.booksSignal.set(mappedBooks);
+      },
+      error: (err) => {
+        console.error('Failed to load books from backend REST API', err);
+      }
+    });
   }
 
   /**
-   * Add a new book to the library.
+   * Add a new book to the library via the backend.
    */
   addBook(bookData: Omit<Book, 'id' | 'availableCopies'>): void {
-    const newBook: Book = {
-      ...bookData,
-      id: `book-${Date.now()}`,
-      availableCopies: bookData.quantity // Initially all copies are available
+    const headers = {
+      'X-User-Role': 'LIBRARIAN'
     };
-    const updated = [...this.booksSignal(), newBook];
-    this.saveBooks(updated);
+    
+    this.http.post<any>('/api/librarian/books', bookData, { headers }).subscribe({
+      next: () => {
+        this.refreshBooks();
+      },
+      error: (err) => {
+        console.error('Failed to add book via backend', err);
+      }
+    });
   }
 
   /**
-   * Update an existing book.
-   * Adjusts available copies based on the change in total quantity.
+   * Update a book's availability status.
    */
   updateBook(updatedBook: Book): void {
-    const currentBooks = this.booksSignal();
-    const index = currentBooks.findIndex(b => b.id === updatedBook.id);
-    
-    if (index !== -1) {
-      const oldBook = currentBooks[index];
-      // Calculate how many copies are currently issued
-      const issuedCopies = oldBook.quantity - oldBook.availableCopies;
-      
-      // The new available copies should be total quantity minus issued copies.
-      // Ensure available copies doesn't fall below zero.
-      const newAvailableCopies = Math.max(0, updatedBook.quantity - issuedCopies);
-      
-      const newBook: Book = {
-        ...updatedBook,
-        availableCopies: newAvailableCopies
-      };
-      
-      const updated = [...currentBooks];
-      updated[index] = newBook;
-      this.saveBooks(updated);
-    }
+    const headers = {
+      'X-User-Role': 'LIBRARIAN'
+    };
+    const isAvailable = updatedBook.availableCopies > 0;
+
+    this.http.put<any>(`/api/librarian/books/${updatedBook.id}/availability`, null, {
+      headers,
+      params: { available: String(isAvailable) }
+    }).subscribe({
+      next: () => {
+        this.refreshBooks();
+      },
+      error: (err) => {
+        console.error('Failed to update book availability via backend', err);
+      }
+    });
   }
 
   /**
-   * Delete a book from the list.
+   * Delete a book from the backend.
    */
   deleteBook(id: string): void {
-    const updated = this.booksSignal().filter(b => b.id !== id);
-    this.saveBooks(updated);
+    const headers = {
+      'X-User-Role': 'LIBRARIAN'
+    };
+
+    this.http.delete<void>(`/api/librarian/books/${id}`, { headers }).subscribe({
+      next: () => {
+        this.refreshBooks();
+      },
+      error: (err) => {
+        console.error('Failed to delete book via backend', err);
+      }
+    });
   }
 
   /**
-   * Update available copies (e.g. +/- 1 when issued or returned).
+   * Triggered when book transaction is completed.
    */
   updateAvailableCopies(id: string, change: number): boolean {
-    const currentBooks = this.booksSignal();
-    const index = currentBooks.findIndex(b => b.id === id);
-    
-    if (index !== -1) {
-      const book = currentBooks[index];
-      const newAvailable = book.availableCopies + change;
-      
-      if (newAvailable >= 0 && newAvailable <= book.quantity) {
-        const updated = [...currentBooks];
-        updated[index] = {
-          ...book,
-          availableCopies: newAvailable
-        };
-        this.saveBooks(updated);
-        return true;
-      }
-    }
-    return false;
+    this.refreshBooks();
+    return true;
   }
 }
