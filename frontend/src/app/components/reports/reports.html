@@ -1,0 +1,122 @@
+<div class="view-header">
+  <h3 class="view-title">Library Reports & Logs</h3>
+  <p class="view-subtitle">Monitor catalog distribution, check overdue logs, and view late return fines.</p>
+</div>
+
+<!-- Financial Summary Cards (Librarian Only) -->
+@if (currentUser()?.role === 'Librarian') {
+  <div class="grid-2">
+    <div class="stat-card">
+      <div class="stat-icon green">
+        <i class="bi bi-wallet2"></i>
+      </div>
+      <div class="stat-content">
+        <span class="stat-value">{{ collectedFines() }} rs</span>
+        <span class="stat-label">Total Fine Collected</span>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon red">
+        <i class="bi bi-hourglass-split"></i>
+      </div>
+      <div class="stat-content">
+        <span class="stat-value">{{ uncollectedFines() }} rs</span>
+        <span class="stat-label">Pending Fines (Active Loans)</span>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- Overdue Loans Section -->
+<div class="custom-card">
+  <div class="custom-card-title">
+    <span>Overdue Book Records</span>
+    <span class="badge-solid red">Alerts: {{ overdueRecords().length }}</span>
+  </div>
+
+  <div class="custom-table-container">
+    <table class="custom-table">
+      <thead>
+        <tr>
+          @if (currentUser()?.role === 'Librarian') {
+            <th>Borrower</th>
+          }
+          <th>Book Title</th>
+          <th>Issue Date</th>
+          <th>Due Date</th>
+          <th class="text-end">Accumulated Fine</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (record of overdueRecords(); track record.id) {
+          <tr>
+            @if (currentUser()?.role === 'Librarian') {
+              <td>
+                <span class="fw-semibold text-main">{{ record.borrowerName }}</span>
+                <span class="small text-muted d-block" style="font-size: 0.7rem;">{{ record.borrowerEmail }}</span>
+              </td>
+            }
+            <td>
+              <span class="fw-medium text-main">{{ record.bookTitle }}</span>
+              <span class="small text-muted d-block" style="font-size: 0.7rem;">by {{ record.bookAuthor }}</span>
+            </td>
+            <td class="small">{{ record.issueDate | date:'mediumDate' }}</td>
+            <td class="small fw-semibold text-danger">{{ record.dueDate | date:'mediumDate' }}</td>
+            <td class="text-end">
+              <span class="badge-solid red">{{ record.currentFine }} rs</span>
+            </td>
+          </tr>
+        } @empty {
+          <tr>
+            <td colspan="5" class="text-center text-muted py-4">
+              <i class="bi bi-shield-check text-success" style="font-size: 1.5rem; display: block; margin-bottom: 0.25rem;"></i>
+              No overdue loans at the moment. All issues are within their return periods.
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Category Distribution Section (Librarian Only) -->
+@if (currentUser()?.role === 'Librarian') {
+  <div class="custom-card">
+    <div class="custom-card-title">
+      <span>Book Catalog Inventory by Category</span>
+      <i class="bi bi-bar-chart-steps text-accent"></i>
+    </div>
+
+    <div class="custom-table-container">
+      <table class="custom-table">
+        <thead>
+          <tr>
+            <th>Category Name</th>
+            <th class="text-center">Unique Titles</th>
+            <th class="text-center">Total Copies</th>
+            <th class="text-center">Available Copies</th>
+            <th class="text-center">Issued Copies</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (report of categoryReports(); track report.category) {
+            <tr>
+              <td>
+                <span class="fw-semibold text-main">{{ report.category }}</span>
+              </td>
+              <td class="text-center">{{ report.totalTitles }}</td>
+              <td class="text-center">{{ report.totalCopies }}</td>
+              <td class="text-center text-success fw-bold">{{ report.availableCopies }}</td>
+              <td class="text-center text-warning fw-bold">{{ report.issuedCopies }}</td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="5" class="text-center text-muted py-4">No books registered in the catalog.</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+}

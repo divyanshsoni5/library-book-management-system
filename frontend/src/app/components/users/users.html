@@ -1,0 +1,51 @@
+<div class="view-header">
+  <h3 class="view-title">Registered Library Members</h3>
+  <p class="view-subtitle">View registered students, teachers, and librarians enrolled in the system.</p>
+</div>
+
+<div class="custom-card" style="padding: 0;">
+  <div class="custom-table-container" style="border: none; box-shadow: none;">
+    <table class="custom-table">
+      <thead>
+        <tr>
+          <th>User ID</th>
+          <th>Name</th>
+          <th>Email Address</th>
+          <th>System Role</th>
+          <th>Access Key / ID Info</th>
+          <th class="text-end">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (user of userService.users(); track user.id) {
+          <tr>
+            <td><code>{{ user.id }}</code></td>
+            <td>
+              <div class="fw-bold text-main">{{ user.name }}</div>
+            </td>
+            <td>{{ user.email }}</td>
+            <td>
+              <span class="badge-solid" [class.blue]="user.role === 'Student'" [class.brown]="user.role === 'Teacher'" [class.red]="user.role === 'Librarian'">
+                {{ user.role }}
+              </span>
+            </td>
+            <td>
+              @if (user.role === 'Student') {
+                <span class="small text-muted">Enrollment: <code>{{ user.enrollmentNo }}</code></span>
+              } @else if (user.role === 'Teacher') {
+                <span class="small text-muted">Teacher ID: <code>{{ user.teacherId }}</code></span>
+              } @else {
+                <span class="small text-muted">Password Required</span>
+              }
+            </td>
+            <td class="text-end">
+              <span class="badge-solid green">
+                <i class="bi bi-circle-fill" style="font-size: 0.45rem; margin-right: 0.35rem; vertical-align: middle;"></i> Active Account
+              </span>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+</div>

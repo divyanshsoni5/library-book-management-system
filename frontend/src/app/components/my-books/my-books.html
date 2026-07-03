@@ -1,0 +1,67 @@
+<div class="view-header">
+  <h3 class="view-title">My Issued Books</h3>
+  <p class="view-subtitle">Track your active reading list, due dates, and outstanding fines.</p>
+</div>
+
+<!-- Fine Policy Notice Card -->
+<div class="custom-card" style="border-left: 4px solid var(--primary-blue);">
+  <div style="display: flex; gap: 0.75rem; align-items: flex-start;">
+    <i class="bi bi-info-circle-fill text-accent" style="font-size: 1.25rem;"></i>
+    <div>
+      <h6 class="fw-bold" style="margin: 0 0 0.25rem 0;">Library Fine Policy</h6>
+      <p class="text-muted small" style="margin: 0;">
+        Books can be kept for up to <strong>30 days without fine</strong>. 
+        After 30 days up to 3 months, a fee of <strong>1 rs per day</strong> is applied. 
+        After 3 months, the fine increases to <strong>5 rs per day</strong>.
+      </p>
+    </div>
+  </div>
+</div>
+
+<!-- My Books List -->
+<div class="custom-card" style="padding: 0;">
+  <div class="custom-table-container" style="border: none; box-shadow: none;">
+    <table class="custom-table">
+      <thead>
+        <tr>
+          <th>Book Name</th>
+          <th>Author</th>
+          <th>Issue Date</th>
+          <th>Due Date</th>
+          <th class="text-end">Current Fine</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (record of myIssuedBooks(); track record.id) {
+          <tr>
+            <td>
+              <div class="fw-bold text-main">{{ getBookTitle(record.bookId) }}</div>
+            </td>
+            <td>{{ getBookAuthor(record.bookId) }}</td>
+            <td class="small">{{ record.issueDate | date:'mediumDate' }}</td>
+            <td class="small fw-semibold">{{ record.dueDate | date:'mediumDate' }}</td>
+            <td class="text-end">
+              @let fine = getFine(record.issueDate);
+              @if (fine > 0) {
+                <span class="badge-solid red">
+                  <i class="bi bi-exclamation-triangle-fill" style="margin-right: 0.25rem;"></i> {{ fine }} rs
+                </span>
+              } @else {
+                <span class="badge-solid green">
+                  No Fine
+                </span>
+              }
+            </td>
+          </tr>
+        } @empty {
+          <tr>
+            <td colspan="5" class="text-center py-5 text-muted">
+              <i class="bi bi-journal-check" style="font-size: 2rem; display: block; margin-bottom: 0.5rem; color: var(--text-muted);"></i>
+              <span>You do not have any issued books at the moment.</span>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+</div>

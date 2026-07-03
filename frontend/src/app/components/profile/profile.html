@@ -1,0 +1,48 @@
+<div class="view-header">
+  <h3 class="view-title">My Account Profile</h3>
+  <p class="view-subtitle">View your active library registration and account details.</p>
+</div>
+
+<div style="max-width: 520px; margin: 0 auto;">
+  <div class="custom-card">
+    <div style="text-align: center; margin-bottom: 1.5rem;">
+      <div class="user-avatar" style="width: 72px; height: 72px; font-size: 2rem; margin: 0 auto 0.75rem auto;">
+        {{ userService.currentUser()?.name?.charAt(0) || 'U' }}
+      </div>
+      <h4 style="margin: 0 0 0.25rem 0;">{{ userService.currentUser()?.name }}</h4>
+      <span class="badge-solid blue">{{ userService.currentUser()?.role }}</span>
+    </div>
+
+    <div class="details-summary-box">
+      <div class="details-row">
+        <span class="details-label">Full Name:</span>
+        <span class="details-val">{{ userService.currentUser()?.name }}</span>
+      </div>
+      <div class="details-row">
+        <span class="details-label">Email Address:</span>
+        <span class="details-val">{{ userService.currentUser()?.email }}</span>
+      </div>
+      <div class="details-row">
+        <span class="details-label">Library Card ID:</span>
+        <span class="details-val"><code>{{ userService.currentUser()?.id }}</code></span>
+      </div>
+      @if (userService.currentUser()?.role === 'Student') {
+        <div class="details-row">
+          <span class="details-label">Enrollment Number:</span>
+          <span class="details-val"><code>{{ userService.currentUser()?.enrollmentNo }}</code></span>
+        </div>
+      } @else if (userService.currentUser()?.role === 'Teacher') {
+        <div class="details-row">
+          <span class="details-label">Teacher ID:</span>
+          <span class="details-val"><code>{{ userService.currentUser()?.teacherId }}</code></span>
+        </div>
+      }
+      <div class="details-row">
+        <span class="details-label">Membership Status:</span>
+        <span class="details-val" style="color: var(--success-green);">
+          <i class="bi bi-patch-check-fill" style="margin-right: 0.25rem;"></i> Active Registered
+        </span>
+      </div>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,77 @@
+<nav class="top-nav">
+  <!-- Dashboard Tab -->
+  <button 
+    (click)="selectTab('dashboard')" 
+    class="nav-item" 
+    [class.active]="activeTab === 'dashboard'">
+    <i class="bi bi-grid-1x2-fill"></i>
+    <span>Dashboard</span>
+  </button>
+
+  <!-- Browse Books Catalog Tab -->
+  <button 
+    (click)="selectTab('all-books')" 
+    class="nav-item" 
+    [class.active]="activeTab === 'all-books'">
+    <i class="bi bi-journal-album"></i>
+    <span>Books</span>
+  </button>
+
+  <!-- My Books Tab (Student & Teacher only) -->
+  @if (role === 'Student' || role === 'Teacher') {
+    <button 
+      (click)="selectTab('my-books')" 
+      class="nav-item" 
+      [class.active]="activeTab === 'my-books'">
+      <i class="bi bi-bookmark-star-fill"></i>
+      <span>My Borrowed Books</span>
+    </button>
+  }
+
+  <!-- Users Tab (Librarian only) -->
+  @if (role === 'Librarian') {
+    <button 
+      (click)="selectTab('users')" 
+      class="nav-item" 
+      [class.active]="activeTab === 'users'">
+      <i class="bi bi-people-fill"></i>
+      <span>Users</span>
+    </button>
+
+    <!-- Issue Tab (Librarian only) -->
+    <button 
+      (click)="selectTab('issue')" 
+      class="nav-item" 
+      [class.active]="activeTab === 'issue'">
+      <i class="bi bi-arrow-right-circle-fill"></i>
+      <span>Issue Book</span>
+    </button>
+
+    <!-- Return Tab (Librarian only) -->
+    <button 
+      (click)="selectTab('return')" 
+      class="nav-item" 
+      [class.active]="activeTab === 'return'">
+      <i class="bi bi-arrow-return-left"></i>
+      <span>Return Book</span>
+    </button>
+  }
+
+  <!-- Reports Tab (Common) -->
+  <button 
+    (click)="selectTab('reports')" 
+    class="nav-item" 
+    [class.active]="activeTab === 'reports'">
+    <i class="bi bi-file-earmark-bar-graph-fill"></i>
+    <span>Reports</span>
+  </button>
+
+  <!-- Profile Tab (Common) -->
+  <button 
+    (click)="selectTab('profile')" 
+    class="nav-item" 
+    [class.active]="activeTab === 'profile'">
+    <i class="bi bi-person-fill-gear"></i>
+    <span>Profile</span>
+  </button>
+</nav>

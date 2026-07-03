@@ -1,0 +1,156 @@
+<div class="view-header">
+  <h3 class="view-title">Return Issued Books</h3>
+  <p class="view-subtitle">Manage returned copies, verify due dates, and collect late return fines.</p>
+</div>
+
+<!-- Return List Table -->
+<div class="custom-card" style="padding: 0;">
+  <div class="custom-table-container" style="border: none; box-shadow: none;">
+    <table class="custom-table">
+      <thead>
+        <tr>
+          <th>Borrower</th>
+          <th>Book Title</th>
+          <th>Issue Date</th>
+          <th>Due Date</th>
+          <th class="text-center">Current Fine</th>
+          <th class="text-end">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (record of activeIssuedBooks(); track record.id) {
+          <tr>
+            <!-- User Details -->
+            <td>
+              <div class="fw-bold text-main">{{ getUserName(record.userId) }}</div>
+              <div class="text-muted small" style="font-size: 0.75rem;">{{ getUserEmail(record.userId) }}</div>
+            </td>
+            
+            <!-- Book Title -->
+            <td>
+              <div class="fw-medium text-main">{{ getBookTitle(record.bookId) }}</div>
+            </td>
+            
+            <!-- Dates -->
+            <td class="small">{{ record.issueDate | date:'mediumDate' }}</td>
+            <td class="small fw-semibold">{{ record.dueDate | date:'mediumDate' }}</td>
+            
+            <!-- Dynamic Fine Calculation -->
+            <td class="text-center">
+              @let fine = getFine(record.issueDate);
+              @if (fine > 0) {
+                <span class="badge-solid red">
+                  <i class="bi bi-exclamation-triangle-fill" style="margin-right: 0.25rem;"></i> {{ fine }} rs
+                </span>
+              } @else {
+                <span class="badge-solid green">
+                  No Fine
+                </span>
+              }
+            </td>
+            
+            <!-- Return Button -->
+            <td class="text-end">
+              <button (click)="openReturnModal(record)" class="btn btn-primary btn-sm">
+                <i class="bi bi-arrow-return-left"></i> Return
+              </button>
+            </td>
+          </tr>
+        } @empty {
+          <tr>
+            <td colspan="6" class="text-center py-5 text-muted">
+              <i class="bi bi-journal-check" style="font-size: 2rem; display: block; margin-bottom: 0.5rem; color: var(--text-muted);"></i>
+              <span>All issued books have been returned. No active issues log found.</span>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Custom Return Confirmation Modal -->
+@if (isModalOpen && selectedRecord) {
+  <!-- Backdrop -->
+  <div class="custom-modal-backdrop" (click)="closeModal()"></div>
+  
+  <!-- Modal Dialog -->
+  <div class="custom-modal">
+    <div class="custom-modal-header">
+      <h5 class="custom-modal-title">
+        <i class="bi bi-arrow-return-left text-accent"></i>
+        <span class="ms-2" style="margin-left: 0.35rem;">Confirm Book Return</span>
+      </h5>
+      <button type="button" class="close-btn" (click)="closeModal()">&times;</button>
+    </div>
+    
+    <div class="custom-modal-body">
+      <p class="text-muted small" style="margin-bottom: 1rem;">Please confirm details of the book being returned by the user:</p>
+      
+      <!-- Summary Details -->
+      <div class="details-summary-box">
+        <div class="details-row">
+          <span class="details-label">Borrower:</span>
+          <span class="details-val">{{ getUserName(selectedRecord.userId) }}</span>
+        </div>
+        <div class="details-row">
+          <span class="details-label">Book Title:</span>
+          <span class="details-val">{{ getBookTitle(selectedRecord.bookId) }}</span>
+        </div>
+        <div class="details-row">
+          <span class="details-label">Issued Date:</span>
+          <span class="details-val">{{ selectedRecord.issueDate | date:'mediumDate' }}</span>
+        </div>
+        <div class="details-row">
+          <span class="details-label">Due Date:</span>
+          <span class="details-val">{{ selectedRecord.dueDate | date:'mediumDate' }}</span>
+        </div>
+        <div class="details-row">
+          <span class="details-label">Days Kept:</span>
+          <span class="details-val">{{ daysKept }} days</span>
+        </div>
+      </div>
+
+      <!-- Fine Calculator Policy Output -->
+      <div style="border-top: 1px solid var(--card-border); padding-top: 1rem; margin-top: 1.25rem;">
+        <h6 class="fw-bold" style="margin-bottom: 0.5rem;">Fine Summary</h6>
+        @if (fineAmount > 0) {
+          <div class="custom-alert danger" style="margin-bottom: 0.75rem;">
+            <i class="bi bi-exclamation-triangle-fill" style="font-size: 1.25rem;"></i>
+            <div>
+              <h5 class="fw-bold" style="margin: 0; color: var(--danger-red);">{{ fineAmount }} rs</h5>
+              <span class="small" style="color: var(--danger-red);">
+                Late return fine calculated (kept past 30 days).
+              </span>
+            </div>
+          </div>
+          <p class="small text-muted" style="margin: 0;">
+            Please collect <strong>{{ fineAmount }} rs</strong> from the student before hitting Confirm Return.
+          </p>
+        } @else {
+          <div class="custom-alert success" style="margin: 0;">
+            <i class="bi bi-check-circle-fill"></i>
+            <div>
+              <span class="fw-bold d-block" style="color: var(--success-green);">No outstanding fines</span>
+              <span class="small" style="color: var(--success-green);">Book returned within the 30-day grace period.</span>
+            </div>
+          </div>
+        }
+      </div>
+    </div>
+    
+    <div class="custom-modal-footer">
+      <button type="button" class="btn btn-secondary" (click)="closeModal()">Cancel</button>
+      
+      @if (fineAmount > 0) {
+        <button type="button" class="btn btn-danger" (click)="confirmReturn(true)">
+          Collect {{ fineAmount }} rs & Return
+        </button>
+      } @else {
+        <button type="button" class="btn btn-primary" (click)="confirmReturn(false)">
+          Accept Return
+        </button>
+      }
+    </div>
+  </div>
+}
