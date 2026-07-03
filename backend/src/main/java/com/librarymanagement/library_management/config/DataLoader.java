@@ -27,10 +27,10 @@ public class DataLoader implements CommandLineRunner {
 
     @Override
     public void run(String... args) throws Exception {
-        // Clear existing database records
-        bookIssueRepository.deleteAll();
-        bookRepository.deleteAll();
-        userRepository.deleteAll();
+        // Check if database already has users to avoid wiping/re-seeding persistent databases
+        if (userRepository.count() > 0) {
+            return;
+        }
 
         // 1. Create Users
         User librarian = userRepository.save(new User("librarian1", "LIBRARIAN"));
