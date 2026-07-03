@@ -1,0 +1,30 @@
+<header class="custom-header">
+  <!-- Brand & Logo -->
+  <div class="brand-section">
+    <div class="brand-logo">
+      <i class="bi bi-book-half"></i>
+    </div>
+    <div>
+      <h1 class="brand-title">SGSITS Library Portal</h1>
+      <span class="brand-subtitle">College Library Management System</span>
+    </div>
+  </div>
+
+  <!-- User Section and Logout -->
+  <div class="user-profile-widget">
+    <!-- User Avatar & Profile Details -->
+    <div class="user-avatar">
+      {{ userService.currentUser()?.name?.charAt(0) || 'U' }}
+    </div>
+    <div class="user-details">
+      <span class="user-name">{{ userService.currentUser()?.name }}</span>
+      <span class="user-role-badge">{{ userService.currentUser()?.role }}</span>
+    </div>
+
+    <!-- Simple Logout Button -->
+    <button (click)="logout()" class="btn btn-secondary btn-sm" title="Log Out">
+      <i class="bi bi-box-arrow-right text-accent"></i>
+      <span>Logout</span>
+    </button>
+  </div>
+</header>

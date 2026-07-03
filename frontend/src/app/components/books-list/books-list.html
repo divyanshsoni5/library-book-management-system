@@ -1,0 +1,230 @@
+<!-- Main Header / Controls -->
+<div class="view-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;">
+  <div>
+    <h3 class="view-title">
+      {{ role === 'Librarian' ? 'Books Catalog Manager' : 'Browse Books Catalog' }}
+    </h3>
+    <p class="view-subtitle">
+      {{ role === 'Librarian' ? 'Manage existing titles, edit copies, or add new editions' : 'Search and view available books' }}
+    </p>
+  </div>
+  
+  <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+    <!-- Search Box -->
+    <div class="input-with-icon" style="min-width: 280px;">
+      <i class="bi bi-search input-icon"></i>
+      <input 
+        type="text" 
+        [ngModel]="searchQuery()" 
+        (ngModelChange)="searchQuery.set($event)"
+        class="form-input-control" 
+        style="padding-left: 2.25rem;"
+        placeholder="Search by title or author..." />
+    </div>
+
+    <!-- Add Book Button (Librarian Only) -->
+    @if (role === 'Librarian') {
+      <button (click)="openAddModal()" class="btn btn-primary">
+        <i class="bi bi-plus-lg"></i>
+        <span>Add Book</span>
+      </button>
+    }
+  </div>
+</div>
+
+<!-- Books Table Card -->
+<div class="custom-card" style="padding: 0;">
+  <div class="custom-table-container" style="border: none; box-shadow: none;">
+    <table class="custom-table">
+      <thead>
+        @if (role !== 'Librarian') {
+          <tr>
+            <th>Book Name</th>
+            <th>Author</th>
+            <th>Category</th>
+            <th class="text-center">Status</th>
+          </tr>
+        } @else {
+          <tr>
+            <th>Title</th>
+            <th>Author</th>
+            <th>Category</th>
+            <th>ISBN</th>
+            <th class="text-center">Quantity</th>
+            <th class="text-center">Available</th>
+            <th class="text-end">Actions</th>
+          </tr>
+        }
+      </thead>
+      <tbody>
+        @for (book of filteredBooks(); track book.id) {
+          <tr>
+            <!-- Book Title -->
+            <td>
+              <div class="fw-bold text-main">{{ book.title }}</div>
+            </td>
+            <!-- Author -->
+            <td>{{ book.author }}</td>
+            <!-- Category -->
+            <td>
+              <span class="badge-solid brown">{{ book.category }}</span>
+            </td>
+            
+            <!-- Role Specific Columns -->
+            @if (role !== 'Librarian') {
+              <td class="text-center">
+                @if (book.availableCopies > 0) {
+                  <span class="badge-solid green">
+                    <i class="bi bi-check-circle-fill" style="margin-right: 0.25rem;"></i> Available ({{ book.availableCopies }} copies)
+                  </span>
+                } @else {
+                  <span class="badge-solid red">
+                    <i class="bi bi-x-circle-fill" style="margin-right: 0.25rem;"></i> Out of Stock
+                  </span>
+                }
+              </td>
+            } @else {
+              <!-- ISBN -->
+              <td><code>{{ book.isbn }}</code></td>
+              <!-- Total Quantity -->
+              <td class="text-center fw-bold">{{ book.quantity }}</td>
+              <!-- Available Copies -->
+              <td class="text-center">
+                <span class="badge-solid" [class.green]="book.availableCopies > 0" [class.red]="book.availableCopies === 0">
+                  {{ book.availableCopies }} left
+                </span>
+              </td>
+              <!-- Librarian Actions -->
+              <td class="text-end">
+                <div style="display: inline-flex; gap: 0.5rem;">
+                  <button (click)="openEditModal(book)" class="btn btn-secondary btn-sm" title="Edit Book">
+                    <i class="bi bi-pencil-square text-accent"></i>
+                  </button>
+                  <button (click)="deleteBook(book.id)" class="btn btn-danger btn-sm" title="Delete Book">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                </div>
+              </td>
+            }
+          </tr>
+        } @empty {
+          <tr>
+            <td [attr.colspan]="role === 'Librarian' ? 7 : 4" class="text-center py-5 text-muted">
+              <i class="bi bi-journal-x" style="font-size: 2rem; display: block; margin-bottom: 0.5rem; color: var(--text-muted);"></i>
+              <span>No books found matching the search criteria.</span>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Custom Modal for Add / Edit Book -->
+@if (isModalOpen) {
+  <!-- Backdrop -->
+  <div class="custom-modal-backdrop" (click)="closeModal()"></div>
+  
+  <!-- Modal Dialog -->
+  <div class="custom-modal">
+    <div class="custom-modal-header">
+      <h5 class="custom-modal-title">
+        <i class="bi" [ngClass]="isEditMode ? 'bi-pencil-square text-accent' : 'bi-plus-circle text-accent'"></i>
+        <span class="ms-2" style="margin-left: 0.35rem;">{{ modalTitle }}</span>
+      </h5>
+      <button type="button" class="close-btn" (click)="closeModal()">&times;</button>
+    </div>
+    
+    <form (ngSubmit)="bookFormGroup.form.valid && saveBook()" #bookFormGroup="ngForm">
+      <div class="custom-modal-body">
+        
+        <!-- Book Title -->
+        <div class="form-group">
+          <label for="bookTitle">Book Title *</label>
+          <input 
+            type="text" 
+            id="bookTitle" 
+            name="title" 
+            [(ngModel)]="bookForm.title" 
+            #titleInput="ngModel"
+            required 
+            class="form-input-control" 
+            placeholder="e.g. Clean Architecture" />
+        </div>
+
+        <!-- Author -->
+        <div class="form-group">
+          <label for="bookAuthor">Author *</label>
+          <input 
+            type="text" 
+            id="bookAuthor" 
+            name="author" 
+            [(ngModel)]="bookForm.author" 
+            #authorInput="ngModel"
+            required 
+            class="form-input-control" 
+            placeholder="e.g. Robert C. Martin" />
+        </div>
+
+        <div class="form-grid">
+          <!-- Category -->
+          <div class="form-group">
+            <label for="bookCategory">Category *</label>
+            <select 
+              id="bookCategory" 
+              name="category" 
+              [(ngModel)]="bookForm.category" 
+              #categoryInput="ngModel"
+              required 
+              class="form-input-control"
+              style="padding: 0.55rem 0.75rem;">
+              <option value="" disabled selected>Select Category</option>
+              <option value="Computer Science">Computer Science</option>
+              <option value="Information Technology">Information Technology</option>
+              <option value="Electronics & TC">Electronics & TC</option>
+              <option value="Electrical Engineering">Electrical Engineering</option>
+              <option value="Mechanical Engineering">Mechanical Engineering</option>
+              <option value="Civil Engineering">Civil Engineering</option>
+              <option value="Applied Mathematics">Applied Mathematics</option>
+            </select>
+          </div>
+
+          <!-- ISBN -->
+          <div class="form-group">
+            <label for="bookIsbn">ISBN *</label>
+            <input 
+              type="text" 
+              id="bookIsbn" 
+              name="isbn" 
+              [(ngModel)]="bookForm.isbn" 
+              #isbnInput="ngModel"
+              required
+              class="form-input-control" 
+              placeholder="e.g. 9780132350884" />
+          </div>
+        </div>
+
+        <!-- Total Quantity -->
+        <div class="form-group">
+          <label for="bookQuantity">Total Quantity *</label>
+          <input 
+            type="number" 
+            id="bookQuantity" 
+            name="quantity" 
+            [(ngModel)]="bookForm.quantity" 
+            #quantityInput="ngModel"
+            required 
+            min="1"
+            class="form-input-control" />
+        </div>
+
+      </div>
+      <div class="custom-modal-footer">
+        <button type="button" class="btn btn-secondary" (click)="closeModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary" [disabled]="bookFormGroup.invalid">
+          {{ isEditMode ? 'Update' : 'Add' }} Book
+        </button>
+      </div>
+    </form>
+  </div>
+}

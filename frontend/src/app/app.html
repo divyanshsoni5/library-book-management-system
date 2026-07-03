@@ -1,0 +1,56 @@
+<!-- Check login status -->
+@if (!userService.currentUser()) {
+  <!-- Login Screen -->
+  <app-login></app-login>
+} @else {
+  <!-- Main Application Wrapper -->
+  <app-header></app-header>
+  
+  <div class="main-container">
+    <!-- Horizontal Navigation Tabs -->
+    <app-navigation 
+      [activeTab]="activeTab()" 
+      [role]="userService.currentUser()?.role || 'Student'"
+      (tabChange)="onTabChange($event)"
+      (addBookTriggered)="onAddBookTriggered()">
+    </app-navigation>
+
+    <!-- Main Content Display -->
+    <main class="mt-2">
+      @if (activeTab() === 'dashboard') {
+        <app-dashboard 
+          (tabChange)="onTabChange($event)"
+          (addBookTriggered)="onAddBookTriggered()">
+        </app-dashboard>
+      }
+
+      @if (activeTab() === 'all-books') {
+        <app-books-list [role]="userService.currentUser()?.role || 'Student'"></app-books-list>
+      }
+      
+      @if (activeTab() === 'my-books') {
+        <app-my-books></app-my-books>
+      }
+      
+      @if (activeTab() === 'profile') {
+        <app-profile></app-profile>
+      }
+      
+      @if (activeTab() === 'issue') {
+        <app-issue-book (tabChange)="onTabChange($event)"></app-issue-book>
+      }
+      
+      @if (activeTab() === 'return') {
+        <app-return-book></app-return-book>
+      }
+      
+      @if (activeTab() === 'users') {
+        <app-users></app-users>
+      }
+
+      @if (activeTab() === 'reports') {
+        <app-reports></app-reports>
+      }
+    </main>
+  </div>
+}

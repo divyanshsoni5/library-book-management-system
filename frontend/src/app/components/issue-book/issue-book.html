@@ -1,0 +1,98 @@
+<div class="view-header">
+  <h3 class="view-title">Issue Book to Member</h3>
+  <p class="view-subtitle">Record a new book issuance transaction for students or teachers.</p>
+</div>
+
+<div style="max-width: 680px; margin: 0 auto;">
+  
+  <!-- Success Notification Alert -->
+  @if (successMessage) {
+    <div class="custom-alert success">
+      <i class="bi bi-check-circle-fill"></i>
+      <div>
+        <strong>Success!</strong> {{ successMessage }}
+        <div class="small text-muted" style="margin-top: 0.2rem;">Redirecting to Return logs...</div>
+      </div>
+    </div>
+  }
+
+  <!-- Error Notification Alert -->
+  @if (errorMessage) {
+    <div class="custom-alert danger">
+      <i class="bi bi-exclamation-triangle-fill"></i>
+      <div>
+        <strong>Error!</strong> {{ errorMessage }}
+      </div>
+    </div>
+  }
+
+  <div class="custom-card">
+    <form (ngSubmit)="issueForm.form.valid && submitIssue()" #issueForm="ngForm">
+      
+      <!-- Select User -->
+      <div class="form-group">
+        <label for="selectUser">Select Student / Teacher *</label>
+        <select 
+          id="selectUser" 
+          name="userId" 
+          [(ngModel)]="selectedUserId" 
+          #userInput="ngModel"
+          required 
+          class="form-input-control"
+          style="padding: 0.65rem 0.875rem;">
+          <option value="" disabled selected>-- Choose a Member --</option>
+          @for (user of availableUsers(); track user.id) {
+            <option [value]="user.id">
+              {{ user.name }} ({{ user.role }} - {{ user.email }})
+            </option>
+          }
+        </select>
+      </div>
+
+      <!-- Select Book -->
+      <div class="form-group">
+        <label for="selectBook">Select Book Title *</label>
+        <select 
+          id="selectBook" 
+          name="bookId" 
+          [(ngModel)]="selectedBookId" 
+          #bookInput="ngModel"
+          required 
+          class="form-input-control"
+          style="padding: 0.65rem 0.875rem;">
+          <option value="" disabled selected>-- Choose an Available Book --</option>
+          @for (book of availableBooks(); track book.id) {
+            <option [value]="book.id">
+              {{ book.title }} by {{ book.author }} ({{ book.availableCopies }} copies available)
+            </option>
+          } @empty {
+            <option value="" disabled>No books are currently in stock</option>
+          }
+        </select>
+      </div>
+
+      <!-- Issue Date -->
+      <div class="form-group">
+        <label for="issueDate">Issue Date *</label>
+        <input 
+          type="date" 
+          id="issueDate" 
+          name="issueDate" 
+          [(ngModel)]="issueDate" 
+          #dateInput="ngModel"
+          required 
+          class="form-input-control" />
+      </div>
+
+      <!-- Form Actions -->
+      <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.75rem;">
+        <button type="button" (click)="tabChange.emit('all-books')" class="btn btn-secondary">Cancel</button>
+        <button type="submit" class="btn btn-primary" [disabled]="issueForm.invalid">
+          <i class="bi bi-arrow-right-circle"></i>
+          <span>Confirm Issue Book</span>
+        </button>
+      </div>
+
+    </form>
+  </div>
+</div>

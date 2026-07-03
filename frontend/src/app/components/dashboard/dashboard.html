@@ -1,0 +1,172 @@
+<div class="view-header">
+  <h3 class="view-title">Welcome back, {{ currentUser()?.name }}</h3>
+  <p class="view-subtitle">SGSITS Library - College Library Management System</p>
+</div>
+
+<!-- LIBRARIAN DASHBOARD VIEW -->
+@if (currentUser()?.role === 'Librarian') {
+  <!-- Stats Grid -->
+  <div class="grid-stats">
+    <div class="stat-card">
+      <div class="stat-icon blue">
+        <i class="bi bi-collection"></i>
+      </div>
+      <div class="stat-content">
+        <span class="stat-value">{{ totalBooksCount() }}</span>
+        <span class="stat-label">Total Copies</span>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon green">
+        <i class="bi bi-check-circle-fill"></i>
+      </div>
+      <div class="stat-content">
+        <span class="stat-value">{{ availableBooksCount() }}</span>
+        <span class="stat-label">Available</span>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon">
+        <i class="bi bi-journal-bookmark-fill"></i>
+      </div>
+      <div class="stat-content">
+        <span class="stat-value">{{ issuedBooksCount() }}</span>
+        <span class="stat-label">Currently Issued</span>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon red">
+        <i class="bi bi-exclamation-triangle-fill"></i>
+      </div>
+      <div class="stat-content">
+        <span class="stat-value">{{ overdueBooksCount() }}</span>
+        <span class="stat-label">Overdue Alerts</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent Activity Log (Full Width) -->
+  <div class="custom-card">
+    <div class="custom-card-title">
+      <span>Recent Transactions Log</span>
+      <i class="bi bi-clock-history text-accent"></i>
+    </div>
+    
+    <div class="custom-table-container" style="border: none; box-shadow: none;">
+      <table class="custom-table">
+        <thead>
+          <tr>
+            <th>User</th>
+            <th>Book Title</th>
+            <th>Date Issued</th>
+            <th>Due Date</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (act of recentActivities(); track act.id) {
+            <tr>
+              <td>
+                <span class="fw-bold text-main">{{ act.userName }}</span>
+                <span class="small text-muted d-block" style="font-size: 0.7rem;">{{ act.userRole }}</span>
+              </td>
+              <td class="fw-medium">{{ act.bookTitle }}</td>
+              <td class="small">{{ act.issueDate | date:'mediumDate' }}</td>
+              <td class="small">{{ act.dueDate | date:'mediumDate' }}</td>
+              <td>
+                @if (act.returnDate) {
+                  <span class="badge-solid green">Returned</span>
+                } @else {
+                  <span class="badge-solid brown">Active Loan</span>
+                }
+              </td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="5" class="text-center text-muted py-4">No recent activity logged.</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+}
+
+<!-- STUDENT & TEACHER DASHBOARD VIEW -->
+@if (currentUser()?.role === 'Student' || currentUser()?.role === 'Teacher') {
+  <div class="grid-3">
+    <div class="stat-card">
+      <div class="stat-icon blue">
+        <i class="bi bi-journal-check"></i>
+      </div>
+      <div class="stat-content">
+        <span class="stat-value">{{ myBorrowedCount() }}</span>
+        <span class="stat-label">My Active Borrowed Books</span>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon red">
+        <i class="bi bi-exclamation-octagon"></i>
+      </div>
+      <div class="stat-content">
+        <span class="stat-value">{{ myOverdueCount() }}</span>
+        <span class="stat-label">My Overdue Books</span>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon green">
+        <i class="bi bi-book"></i>
+      </div>
+      <div class="stat-content">
+        <span class="stat-value">{{ availableBooksCount() }}</span>
+        <span class="stat-label">Books Catalog Available</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- User's Recent Loan History (Full Width) -->
+  <div class="custom-card mt-2">
+    <div class="custom-card-title">
+      <span>My Library Borrowing Log</span>
+      <i class="bi bi-history text-accent"></i>
+    </div>
+    
+    <div class="custom-table-container" style="border: none; box-shadow: none;">
+      <table class="custom-table">
+        <thead>
+          <tr>
+            <th>Book Title</th>
+            <th>Issue Date</th>
+            <th>Due Date</th>
+            <th>Status / Return Date</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (act of myRecentActivities(); track act.id) {
+            <tr>
+              <td class="fw-bold text-main">{{ act.bookTitle }}</td>
+              <td class="small">{{ act.issueDate | date:'mediumDate' }}</td>
+              <td class="small fw-semibold">{{ act.dueDate | date:'mediumDate' }}</td>
+              <td>
+                @if (act.returnDate) {
+                  <span class="badge-solid green">Returned on {{ act.returnDate | date:'mediumDate' }}</span>
+                } @else {
+                  <span class="badge-solid brown">Due (Active Loan)</span>
+                }
+              </td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="4" class="text-center text-muted py-4">No borrow records found. Browse the catalog to borrow books.</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+}
