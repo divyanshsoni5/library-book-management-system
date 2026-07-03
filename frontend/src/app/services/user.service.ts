@@ -1,4 +1,7 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable, signal, inject } from '@angular/core';
+import { HttpClient, HttpParams, HttpHeaders } from '@angular/common/http';
+import { Observable, of, throwError } from 'rxjs';
+import { map, catchError, tap } from 'rxjs/operators';
 import { User } from '../models/models';
 
 @Injectable({
@@ -6,61 +9,22 @@ import { User } from '../models/models';
 })
 export class UserService {
   private readonly USER_STORAGE_KEY = 'lms_current_user';
+  private http = inject(HttpClient);
   
-  // Default mock users
-  private readonly defaultUsers: User[] = [
-    {
-      id: 'user-1',
-      name: 'Aarav Sharma',
-      email: '0801CS241001@sgsits.ac.in',
-      role: 'Student',
-      enrollmentNo: '0801CS241001'
-    },
-    {
-      id: 'user-2',
-      name: 'Priya Patel',
-      email: '0801CS241002@sgsits.ac.in',
-      role: 'Student',
-      enrollmentNo: '0801CS241002'
-    },
-    {
-      id: 'user-3',
-      name: 'Aditya Verma',
-      email: '0801CS241003@sgsits.ac.in',
-      role: 'Student',
-      enrollmentNo: '0801CS241003'
-    },
-    {
-      id: 'user-4',
-      name: 'Rajesh Kumar',
-      email: 'rajesh.kumar@sgsits.ac.in',
-      role: 'Teacher',
-      teacherId: 'rajesh.kumar@sgsits.ac.in'
-    },
-    {
-      id: 'user-5',
-      name: 'Meera Nair',
-      email: 'meera.nair@sgsits.ac.in',
-      role: 'Teacher',
-      teacherId: 'meera.nair@sgsits.ac.in'
-    },
-    {
-      id: 'user-6',
-      name: 'Sarah Jenkins',
-      email: 'sarah.jenkins@sgsits.ac.in',
-      role: 'Librarian',
-      password: 'admin'
-    }
-  ];
-
-  private usersSignal = signal<User[]>(this.defaultUsers);
+  private usersSignal = signal<User[]>([]);
   users = this.usersSignal.asReadonly();
 
   // Writable signal for current logged in user
   private currentUserSignal = signal<User | null>(this.loadCurrentUser());
   currentUser = this.currentUserSignal.asReadonly();
 
-  constructor() {}
+  constructor() {
+    // If we already have a logged in librarian, fetch all users on startup
+    const user = this.currentUser();
+    if (user && user.role === 'Librarian') {
+      this.refreshUsers();
+    }
+  }
 
   /**
    * Load active user from localStorage if logged in.
@@ -77,26 +41,50 @@ export class UserService {
     return null;
   }
 
+  private mapBackendUser(backendUser: any): User {
+    return {
+      id: `${backendUser.id}`,
+      name: backendUser.username,
+      email: backendUser.role === 'LIBRARIAN' ? `${backendUser.username}@sgsits.ac.in` : `${backendUser.username}@student.com`,
+      role: backendUser.role === 'LIBRARIAN' ? 'Librarian' : 'Student',
+      enrollmentNo: backendUser.role === 'STUDENT' ? backendUser.username : undefined
+    };
+  }
+
   /**
-   * Login as a Student, Teacher, or Librarian.
+   * Login as a Student or Librarian.
    */
-  login(role: 'Student' | 'Teacher' | 'Librarian', identifier: string): boolean {
-    let matchedUser: User | undefined;
+  login(role: 'Student' | 'Teacher' | 'Librarian', identifier: string): Observable<boolean> {
+    // Since backend role is either STUDENT or LIBRARIAN, map Teacher/Student to STUDENT
+    const backendRole = role === 'Librarian' ? 'LIBRARIAN' : 'STUDENT';
+    const params = new HttpParams()
+      .set('username', identifier.trim())
+      .set('role', backendRole);
 
-    if (role === 'Student') {
-      matchedUser = this.defaultUsers.find(u => u.role === 'Student' && u.enrollmentNo === identifier.trim());
-    } else if (role === 'Teacher') {
-      matchedUser = this.defaultUsers.find(u => u.role === 'Teacher' && u.email === identifier.trim().toLowerCase());
-    } else if (role === 'Librarian') {
-      matchedUser = this.defaultUsers.find(u => u.role === 'Librarian' && u.password === identifier.trim());
-    }
-
-    if (matchedUser) {
-      this.currentUserSignal.set(matchedUser);
-      localStorage.setItem(this.USER_STORAGE_KEY, JSON.stringify(matchedUser));
-      return true;
-    }
-    return false;
+    return this.http.post<any>('/api/users/login', null, { params }).pipe(
+      map(backendUser => {
+        if (backendUser && backendUser.id) {
+          const user = this.mapBackendUser(backendUser);
+          // Preserve Teacher role in UI if they selected Teacher
+          if (role === 'Teacher') {
+            user.role = 'Teacher';
+            user.teacherId = identifier;
+          }
+          this.currentUserSignal.set(user);
+          localStorage.setItem(this.USER_STORAGE_KEY, JSON.stringify(user));
+          if (user.role === 'Librarian') {
+            this.refreshUsers();
+          }
+          return true;
+        }
+        return false;
+      }),
+      catchError(err => {
+        console.error('Login failed', err);
+        // Re-throw so the subscriber's error handler can show the right message
+        return throwError(() => err);
+      })
+    );
   }
 
   /**
@@ -104,13 +92,36 @@ export class UserService {
    */
   logout(): void {
     this.currentUserSignal.set(null);
+    this.usersSignal.set([]);
     localStorage.removeItem(this.USER_STORAGE_KEY);
   }
 
   /**
-   * Get all registered users (for dropdowns / user tables).
+   * Fetch all registered users (only for Librarians).
+   */
+  refreshUsers(): void {
+    const currentUser = this.currentUser();
+    if (!currentUser || currentUser.role !== 'Librarian') return;
+
+    const headers = new HttpHeaders()
+      .set('X-User-Role', 'LIBRARIAN')
+      .set('X-User-Id', currentUser.id);
+
+    this.http.get<any[]>('/api/librarian/users', { headers }).pipe(
+      map(users => users.map(u => this.mapBackendUser(u))),
+      catchError(err => {
+        console.error('Failed to load users', err);
+        return of([]);
+      })
+    ).subscribe(mappedUsers => {
+      this.usersSignal.set(mappedUsers);
+    });
+  }
+
+  /**
+   * Get all registered users.
    */
   getUsers(): User[] {
-    return this.defaultUsers;
+    return this.users();
   }
 }

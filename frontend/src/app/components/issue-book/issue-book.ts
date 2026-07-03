@@ -50,29 +50,29 @@ export class IssueBookComponent {
       return;
     }
 
-    const success = this.libraryService.issueBook(
+    this.libraryService.issueBook(
       this.selectedUserId,
       this.selectedBookId,
       this.issueDate
-    );
+    ).subscribe(success => {
+      if (success) {
+        const selectedUser = this.userService.users().find(u => u.id === this.selectedUserId);
+        const selectedBook = this.bookService.books().find(b => b.id === this.selectedBookId);
+        
+        this.successMessage = `Successfully issued "${selectedBook?.title}" to "${selectedUser?.name}".`;
+        
+        // Reset form options
+        this.selectedUserId = '';
+        this.selectedBookId = '';
+        this.issueDate = new Date().toISOString().split('T')[0];
 
-    if (success) {
-      const selectedUser = this.userService.users().find(u => u.id === this.selectedUserId);
-      const selectedBook = this.bookService.books().find(b => b.id === this.selectedBookId);
-      
-      this.successMessage = `Successfully issued "${selectedBook?.title}" to "${selectedUser?.name}".`;
-      
-      // Reset form options
-      this.selectedUserId = '';
-      this.selectedBookId = '';
-      this.issueDate = new Date().toISOString().split('T')[0];
-
-      // Auto redirect to returns tab after 2.5 seconds to see the issued log
-      setTimeout(() => {
-        this.tabChange.emit('return');
-      }, 2500);
-    } else {
-      this.errorMessage = 'Failed to issue the book. Verify if copies are available.';
-    }
+        // Auto redirect to returns tab after 2.5 seconds to see the issued log
+        setTimeout(() => {
+          this.tabChange.emit('return');
+        }, 2500);
+      } else {
+        this.errorMessage = 'Failed to issue the book. Verify if copies are available.';
+      }
+    });
   }
 }
