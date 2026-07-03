@@ -2,6 +2,8 @@ import { ApplicationConfig, provideBrowserGlobalErrorListeners } from '@angular/
 import { provideHttpClient } from '@angular/common/http';
 
 export const appConfig: ApplicationConfig = {
-  providers: [provideBrowserGlobalErrorListeners(), provideHttpClient()],
+  providers: [
+    provideBrowserGlobalErrorListeners(),
+    provideHttpClient()
+  ],
 };
-

@@ -2,6 +2,7 @@ import { Component, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { UserService } from '../../services/user.service';
+import { HttpErrorResponse } from '@angular/common/http';
 
 @Component({
   selector: 'app-login',
@@ -29,13 +30,23 @@ export class LoginComponent {
       return;
     }
 
-    const success = this.userService.login(this.selectedRole(), this.identifierInput);
-    if (!success) {
-      if (this.selectedRole() === 'Librarian') {
-        this.errorMessage = 'Invalid Librarian Password. Please try again.';
-      } else {
-        this.errorMessage = `Invalid ID for ${this.selectedRole()}. Check the list below for valid IDs.`;
+    this.userService.login(this.selectedRole(), this.identifierInput).subscribe({
+      next: (success) => {
+        if (!success) {
+          if (this.selectedRole() === 'Librarian') {
+            this.errorMessage = 'Invalid Librarian Password. Use: librarian1';
+          } else {
+            this.errorMessage = `Invalid credentials for ${this.selectedRole()}.`;
+          }
+        }
+      },
+      error: (err: HttpErrorResponse) => {
+        if (err.status === 0) {
+          this.errorMessage = '⚠️ Cannot connect to server. Make sure the backend is running on port 8080.';
+        } else {
+          this.errorMessage = `Server error (${err.status}): ${err.message}`;
+        }
       }
-    }
+    });
   }
 }

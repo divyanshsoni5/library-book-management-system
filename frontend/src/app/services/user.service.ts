@@ -1,5 +1,7 @@
 import { Injectable, signal, inject } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams, HttpHeaders } from '@angular/common/http';
+import { Observable, of, throwError } from 'rxjs';
+import { map, catchError } from 'rxjs/operators';
 import { User } from '../models/models';
 
 @Injectable({
@@ -8,7 +10,7 @@ import { User } from '../models/models';
 export class UserService {
   private readonly USER_STORAGE_KEY = 'lms_current_user';
   private http = inject(HttpClient);
-  
+
   private usersSignal = signal<User[]>([]);
   users = this.usersSignal.asReadonly();
 
@@ -17,81 +19,11 @@ export class UserService {
   currentUser = this.currentUserSignal.asReadonly();
 
   constructor() {
-    this.refreshUsers();
-  }
-
-  /**
-   * Fetch registered users dynamically from the backend /api/users endpoint.
-   * If it fails, falls back to a clean list of demo credentials to ensure the UI remains testable.
-   */
-  refreshUsers(): void {
-    this.http.get<any[]>('/api/users').subscribe({
-      next: (data) => {
-        const mappedUsers: User[] = data.map(u => {
-          let role: 'Student' | 'Teacher' | 'Librarian' = 'Student';
-          const backendRole = u.role ? u.role.toUpperCase() : 'STUDENT';
-          
-          if (backendRole === 'LIBRARIAN') {
-            role = 'Librarian';
-          } else if (backendRole === 'TEACHER') {
-            role = 'Teacher';
-          }
-
-          // Format names and emails according to college requirements
-          const nameLower = u.username ? u.username.toLowerCase() : 'user';
-          let email = '';
-          let enrollmentNo = undefined;
-          let teacherId = undefined;
-
-          if (role === 'Student') {
-            enrollmentNo = u.username;
-            email = `${nameLower}@sgsits.ac.in`;
-          } else {
-            // For teachers and librarians
-            email = `${nameLower}@sgsits.ac.in`;
-            if (role === 'Teacher') {
-              teacherId = email;
-            }
-          }
-
-          return {
-            id: String(u.id),
-            name: u.username,
-            email: email,
-            role: role,
-            enrollmentNo: enrollmentNo,
-            teacherId: teacherId
-          };
-        });
-        this.usersSignal.set(mappedUsers);
-      },
-      error: (err) => {
-        console.warn('Failed to load users from backend /api/users. Using college fallback credentials for local login.', err);
-        this.usersSignal.set([
-          {
-            id: '1',
-            name: 'Sarah Jenkins',
-            email: 'sarah_jenkins@sgsits.ac.in',
-            role: 'Librarian',
-            password: 'admin'
-          },
-          {
-            id: '2',
-            name: 'Aarav Sharma',
-            email: '0801cs241001@sgsits.ac.in',
-            role: 'Student',
-            enrollmentNo: '0801CS241001'
-          },
-          {
-            id: '3',
-            name: 'Priya Patel',
-            email: '0801cs241002@sgsits.ac.in',
-            role: 'Student',
-            enrollmentNo: '0801CS241002'
-          }
-        ]);
-      }
-    });
+    // If we already have a logged in librarian, fetch all users on startup
+    const user = this.currentUser();
+    if (user && user.role === 'Librarian') {
+      this.refreshUsers();
+    }
   }
 
   /**
@@ -109,28 +41,50 @@ export class UserService {
     return null;
   }
 
+  private mapBackendUser(backendUser: any): User {
+    return {
+      id: `${backendUser.id}`,
+      name: backendUser.username,
+      email: backendUser.role === 'LIBRARIAN' ? `${backendUser.username}@sgsits.ac.in` : `${backendUser.username}@student.com`,
+      role: backendUser.role === 'LIBRARIAN' ? 'Librarian' : 'Student',
+      enrollmentNo: backendUser.role === 'STUDENT' ? backendUser.username : undefined
+    };
+  }
+
   /**
-   * Login as a Student, Teacher, or Librarian.
+   * Login as a Student, Teacher, or Librarian via backend REST API.
    */
-  login(role: 'Student' | 'Teacher' | 'Librarian', identifier: string): boolean {
-    let matchedUser: User | undefined;
-    const currentUsers = this.usersSignal();
+  login(role: 'Student' | 'Teacher' | 'Librarian', identifier: string): Observable<boolean> {
+    // Since backend role is either STUDENT or LIBRARIAN, map Teacher/Student to STUDENT
+    const backendRole = role === 'Librarian' ? 'LIBRARIAN' : 'STUDENT';
+    const params = new HttpParams()
+      .set('username', identifier.trim())
+      .set('role', backendRole);
 
-    if (role === 'Student') {
-      matchedUser = currentUsers.find(u => u.role === 'Student' && u.enrollmentNo === identifier.trim());
-    } else if (role === 'Teacher') {
-      matchedUser = currentUsers.find(u => u.role === 'Teacher' && u.email === identifier.trim().toLowerCase());
-    } else if (role === 'Librarian') {
-      // Allow 'admin' password or matching username
-      matchedUser = currentUsers.find(u => u.role === 'Librarian' && (u.password === identifier.trim() || identifier.trim() === 'admin'));
-    }
-
-    if (matchedUser) {
-      this.currentUserSignal.set(matchedUser);
-      localStorage.setItem(this.USER_STORAGE_KEY, JSON.stringify(matchedUser));
-      return true;
-    }
-    return false;
+    return this.http.post<any>('/api/users/login', null, { params }).pipe(
+      map(backendUser => {
+        if (backendUser && backendUser.id) {
+          const user = this.mapBackendUser(backendUser);
+          // Preserve Teacher role in UI if they selected Teacher
+          if (role === 'Teacher') {
+            user.role = 'Teacher';
+            user.teacherId = identifier;
+          }
+          this.currentUserSignal.set(user);
+          localStorage.setItem(this.USER_STORAGE_KEY, JSON.stringify(user));
+          if (user.role === 'Librarian') {
+            this.refreshUsers();
+          }
+          return true;
+        }
+        return false;
+      }),
+      catchError(err => {
+        console.error('Login failed', err);
+        // Re-throw so the subscriber's error handler can show the right message
+        return throwError(() => err);
+      })
+    );
   }
 
   /**
@@ -138,62 +92,71 @@ export class UserService {
    */
   logout(): void {
     this.currentUserSignal.set(null);
+    this.usersSignal.set([]);
     localStorage.removeItem(this.USER_STORAGE_KEY);
   }
 
   /**
-   * Get all registered users (for dropdowns / user tables).
+   * Fetch all registered users (only for Librarians).
    */
-  getUsers(): User[] {
-    return this.usersSignal();
+  refreshUsers(): void {
+    const currentUser = this.currentUser();
+    if (!currentUser || currentUser.role !== 'Librarian') return;
+
+    const headers = new HttpHeaders()
+      .set('X-User-Role', 'LIBRARIAN')
+      .set('X-User-Id', currentUser.id);
+
+    this.http.get<any[]>('/api/librarian/users', { headers }).pipe(
+      map(users => users.map(u => this.mapBackendUser(u))),
+      catchError(err => {
+        console.error('Failed to load users', err);
+        return of([]);
+      })
+    ).subscribe(mappedUsers => {
+      this.usersSignal.set(mappedUsers);
+    });
   }
 
   /**
-   * Add a new user via API with fallback local caching.
+   * Add a new user via API (Librarian only).
    */
   addUser(userData: Omit<User, 'id'>): void {
-    const headers = {
-      'X-User-Role': 'LIBRARIAN'
-    };
-
+    const headers = { 'X-User-Role': 'LIBRARIAN' };
     const backendUser = {
       username: userData.name,
       role: userData.role.toUpperCase()
     };
 
     this.http.post<any>('/api/librarian/users', backendUser, { headers }).subscribe({
-      next: () => {
-        this.refreshUsers();
-      },
+      next: () => { this.refreshUsers(); },
       error: (err) => {
         console.warn('Backend POST /api/librarian/users not implemented yet. Adding user to local state.', err);
         const nextId = String(Math.max(...this.usersSignal().map(u => Number(u.id) || 0), 0) + 1);
-        const newUser: User = {
-          ...userData,
-          id: nextId
-        };
-        this.usersSignal.set([...this.usersSignal(), newUser]);
+        this.usersSignal.set([...this.usersSignal(), { ...userData, id: nextId }]);
       }
     });
   }
 
   /**
-   * Delete a user via API with fallback local caching.
+   * Delete a user via API (Librarian only).
    */
   deleteUser(id: string): void {
-    const headers = {
-      'X-User-Role': 'LIBRARIAN'
-    };
+    const headers = { 'X-User-Role': 'LIBRARIAN' };
 
     this.http.delete<void>(`/api/librarian/users/${id}`, { headers }).subscribe({
-      next: () => {
-        this.refreshUsers();
-      },
+      next: () => { this.refreshUsers(); },
       error: (err) => {
-        console.warn(`Backend DELETE /api/librarian/users/${id} not implemented yet. Deleting user from local state.`, err);
-        const updated = this.usersSignal().filter(u => u.id !== id);
-        this.usersSignal.set(updated);
+        console.warn(`Backend DELETE /api/librarian/users/${id} not implemented. Deleting from local state.`, err);
+        this.usersSignal.set(this.usersSignal().filter(u => u.id !== id));
       }
     });
+  }
+
+  /**
+   * Get all registered users.
+   */
+  getUsers(): User[] {
+    return this.users();
   }
 }
