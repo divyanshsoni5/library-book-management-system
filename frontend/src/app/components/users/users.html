@@ -1,6 +1,13 @@
-<div class="view-header">
-  <h3 class="view-title">Registered Library Members</h3>
-  <p class="view-subtitle">View registered students, teachers, and librarians enrolled in the system.</p>
+<div class="view-header" style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.5rem;">
+  <div>
+    <h3 class="view-title">Registered Library Members</h3>
+    <p class="view-subtitle">View registered students, teachers, and librarians enrolled in the system.</p>
+  </div>
+  @if (currentUser()?.role === 'Librarian') {
+    <button class="btn btn-primary" (click)="openModal()" style="display: flex; align-items: center; gap: 0.5rem; padding: 0.6rem 1.2rem;">
+      <i class="bi bi-person-plus-fill" style="font-size: 1.1rem;"></i> Enlist Member
+    </button>
+  }
 </div>
 
 <div class="custom-card" style="padding: 0;">
@@ -13,7 +20,11 @@
           <th>Email Address</th>
           <th>System Role</th>
           <th>Access Key / ID Info</th>
-          <th class="text-end">Status</th>
+          @if (currentUser()?.role === 'Librarian') {
+            <th class="text-end" style="padding-right: 1.5rem;">Actions</th>
+          } @else {
+            <th class="text-end" style="padding-right: 1.5rem;">Status</th>
+          }
         </tr>
       </thead>
       <tbody>
@@ -35,17 +46,118 @@
               } @else if (user.role === 'Teacher') {
                 <span class="small text-muted">Teacher ID: <code>{{ user.teacherId }}</code></span>
               } @else {
-                <span class="small text-muted">Password Required</span>
+                <span class="small text-muted">Password Protected</span>
               }
             </td>
-            <td class="text-end">
-              <span class="badge-solid green">
-                <i class="bi bi-circle-fill" style="font-size: 0.45rem; margin-right: 0.35rem; vertical-align: middle;"></i> Active Account
-              </span>
-            </td>
+            @if (currentUser()?.role === 'Librarian') {
+              <td class="text-end" style="padding-right: 1.5rem;">
+                @if (user.id !== currentUser()?.id) {
+                  <button class="btn btn-icon text-danger" (click)="onDeleteUser(user.id)" title="Remove Member" style="background: none; border: none; cursor: pointer; padding: 0.25rem;">
+                    <i class="bi bi-trash3-fill" style="font-size: 1.1rem;"></i>
+                  </button>
+                } @else {
+                  <span class="badge-solid green" style="font-size: 0.75rem; padding: 0.15rem 0.45rem;">Logged In</span>
+                }
+              </td>
+            } @else {
+              <td class="text-end" style="padding-right: 1.5rem;">
+                <span class="badge-solid green">
+                  <i class="bi bi-circle-fill" style="font-size: 0.45rem; margin-right: 0.35rem; vertical-align: middle;"></i> Active
+                </span>
+              </td>
+            }
           </tr>
         }
       </tbody>
     </table>
   </div>
 </div>
+
+<!-- Add Member Modal -->
+@if (isModalOpen) {
+  <div class="custom-modal-backdrop" (click)="closeModal()"></div>
+  <div class="custom-modal" style="max-width: 480px;">
+    <div class="custom-modal-header">
+      <h4 class="modal-title">Enroll New Library Member</h4>
+      <button type="button" class="btn-icon" (click)="closeModal()"><i class="bi bi-x-lg"></i></button>
+    </div>
+    <form (ngSubmit)="onSubmit()" #userFormGroup="ngForm">
+      <div class="custom-modal-body" style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1.25rem;">
+        
+        <!-- Full Name -->
+        <div class="form-group">
+          <label for="memberName" style="display: block; font-weight: 500; margin-bottom: 0.4rem; font-size: 0.9rem;">Full Name *</label>
+          <input 
+            type="text" 
+            id="memberName" 
+            name="name" 
+            [(ngModel)]="userForm.name" 
+            #nameInput="ngModel"
+            required 
+            class="form-input-control" 
+            placeholder="e.g. Ramesh Chandra" />
+        </div>
+
+        <!-- Role Selector -->
+        <div class="form-group">
+          <label for="memberRole" style="display: block; font-weight: 500; margin-bottom: 0.4rem; font-size: 0.9rem;">System Role *</label>
+          <select 
+            id="memberRole" 
+            name="role" 
+            [(ngModel)]="userForm.role" 
+            (change)="onRoleChange()"
+            required 
+            class="form-input-control"
+            style="padding: 0.55rem 0.75rem;">
+            <option value="Student">Student</option>
+            <option value="Teacher">Teacher</option>
+            <option value="Librarian">Librarian (Staff)</option>
+          </select>
+        </div>
+
+        <!-- Role Specific Inputs -->
+        @if (userForm.role === 'Student') {
+          <div class="form-group">
+            <label for="studentEnrollment" style="display: block; font-weight: 500; margin-bottom: 0.4rem; font-size: 0.9rem;">Student Enrollment Number *</label>
+            <input 
+              type="text" 
+              id="studentEnrollment" 
+              name="enrollmentNo" 
+              [(ngModel)]="userForm.enrollmentNo" 
+              #enrollmentInput="ngModel"
+              required 
+              pattern="0801[a-zA-Z0-9]{6}"
+              class="form-input-control" 
+              placeholder="e.g. 0801CS241001" />
+            <div class="small text-muted mt-1" style="font-size: 0.75rem; color: var(--text-muted);">Must start with 0801 (e.g., 0801CS241001). Student email is automatically derived.</div>
+          </div>
+        } @else if (userForm.role === 'Librarian') {
+          <div class="form-group">
+            <label for="librarianPassword" style="display: block; font-weight: 500; margin-bottom: 0.4rem; font-size: 0.9rem;">Staff Access Password *</label>
+            <input 
+              type="password" 
+              id="librarianPassword" 
+              name="password" 
+              [(ngModel)]="userForm.password" 
+              #passwordInput="ngModel"
+              required 
+              class="form-input-control" 
+              placeholder="Password for credential verification..." />
+            <div class="small text-muted mt-1" style="font-size: 0.75rem; color: var(--text-muted);">Email will be formatted as firstname_lastname@sgsits.ac.in.</div>
+          </div>
+        } @else if (userForm.role === 'Teacher') {
+          <div class="form-group">
+            <div class="small text-muted" style="font-size: 0.8rem; color: var(--text-muted); background: var(--bg-card-hover); padding: 0.5rem 0.75rem; border-radius: 4px;">Teacher email will be automatically formatted as: <code>firstname_lastname@sgsits.ac.in</code>.</div>
+          </div>
+        }
+
+      </div>
+      <div class="custom-modal-footer">
+        <button type="button" class="btn btn-secondary" (click)="closeModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary" [disabled]="userFormGroup.invalid">
+          Enroll Member
+        </button>
+      </div>
+    </form>
+  </div>
+}
