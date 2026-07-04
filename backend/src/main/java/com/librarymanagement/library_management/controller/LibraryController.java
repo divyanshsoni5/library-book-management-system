@@ -38,16 +38,16 @@ public class LibraryController {
         this.bookIssueRepository = bookIssueRepository;
     }
 
-    // Helper method to validate student role and credentials
+    // Helper method to validate student/teacher role and credentials
     private User validateStudent(String roleHeader, Long idHeader) {
-        if (roleHeader == null || !"STUDENT".equalsIgnoreCase(roleHeader.trim())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied. Student role required.");
+        if (roleHeader == null || (!"STUDENT".equalsIgnoreCase(roleHeader.trim()) && !"TEACHER".equalsIgnoreCase(roleHeader.trim()))) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied. Student/Teacher role required.");
         }
         if (idHeader == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Missing X-User-Id header.");
         }
         return userRepository.findById(idHeader)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Student not found."));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found."));
     }
 
     // Helper method to validate librarian role
@@ -148,24 +148,31 @@ public class LibraryController {
         User student = userRepository.findById(studentId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Student not found."));
 
-        if (!"STUDENT".equalsIgnoreCase(student.getRole())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "User is not a student.");
+        if (!"STUDENT".equalsIgnoreCase(student.getRole()) && !"TEACHER".equalsIgnoreCase(student.getRole())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "User must be a student or a teacher.");
         }
 
         Book book = bookRepository.findById(bookId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Book not found."));
 
-        if (!book.isAvailable()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Book is not available for issue. Current tag: " + book.getTag());
+        if (book.getAvailableCopies() == null) {
+            book.setAvailableCopies(book.isAvailable() ? 1 : 0);
         }
 
-        book.setAvailable(false);
-        book.setTag("ISSUED");
+        if (book.getAvailableCopies() <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Book is not available for issue. Current copies: " + book.getAvailableCopies());
+        }
+
+        book.setAvailableCopies(book.getAvailableCopies() - 1);
+        if (book.getAvailableCopies() == 0) {
+            book.setAvailable(false);
+            book.setTag("ISSUED");
+        }
         bookRepository.save(book);
 
         LocalDate today = LocalDate.now();
-        LocalDate dueDate = today.plusDays(14); // 14-day default issue duration
+        LocalDate dueDate = today.plusDays(30); // 30-day default issue duration
 
         BookIssue issue = new BookIssue(bookId, student.getId(), today, dueDate);
         BookIssue savedIssue = bookIssueRepository.save(issue);
@@ -193,6 +200,10 @@ public class LibraryController {
         issue.setReturnDate(today);
         bookIssueRepository.save(issue);
 
+        if (book.getAvailableCopies() == null) {
+            book.setAvailableCopies(book.isAvailable() ? 1 : 0);
+        }
+        book.setAvailableCopies(book.getAvailableCopies() + 1);
         book.setAvailable(true);
         book.setTag("AVAILABLE");
         bookRepository.save(book);
@@ -248,12 +259,58 @@ public class LibraryController {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "A book with the same ISBN already exists.");
         }
 
-        // Set default states for new book
-        book.setAvailable(true);
-        book.setTag("AVAILABLE");
+        if (book.getQuantity() == null) {
+            book.setQuantity(1);
+        }
+        book.setAvailableCopies(book.getQuantity());
+        book.setAvailable(book.getQuantity() > 0);
+        book.setTag(book.getQuantity() > 0 ? "AVAILABLE" : "UNAVAILABLE");
+        if (book.getCategory() == null || book.getCategory().trim().isEmpty()) {
+            book.setCategory("General");
+        }
 
         Book savedBook = bookRepository.save(book);
         return ResponseEntity.status(HttpStatus.CREATED).body(savedBook);
+    }
+
+    @PutMapping("/librarian/books/{bookId}")
+    public ResponseEntity<Book> updateBook(
+            @RequestHeader(value = "X-User-Role", required = false) String roleHeader,
+            @PathVariable Long bookId,
+            @RequestBody Book updatedBook) {
+        validateLibrarian(roleHeader);
+
+        Book book = bookRepository.findById(bookId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Book not found."));
+
+        if (updatedBook.getTitle() == null || updatedBook.getTitle().trim().isEmpty() ||
+                updatedBook.getAuthor() == null || updatedBook.getAuthor().trim().isEmpty() ||
+                updatedBook.getIsbn() == null || updatedBook.getIsbn().trim().isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Book title, author, and ISBN are required.");
+        }
+
+        java.util.Optional<Book> duplicateIsbn = bookRepository.findByIsbn(updatedBook.getIsbn().trim());
+        if (duplicateIsbn.isPresent() && !duplicateIsbn.get().getId().equals(bookId)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "A book with the same ISBN already exists.");
+        }
+
+        int oldQuantity = book.getQuantity() != null ? book.getQuantity() : 1;
+        int newQuantity = updatedBook.getQuantity() != null ? updatedBook.getQuantity() : 1;
+        int currentAvailable = book.getAvailableCopies() != null ? book.getAvailableCopies() : (book.isAvailable() ? 1 : 0);
+
+        int newAvailable = Math.max(0, currentAvailable + (newQuantity - oldQuantity));
+
+        book.setTitle(updatedBook.getTitle().trim());
+        book.setAuthor(updatedBook.getAuthor().trim());
+        book.setIsbn(updatedBook.getIsbn().trim());
+        book.setCategory(updatedBook.getCategory() != null ? updatedBook.getCategory().trim() : "General");
+        book.setQuantity(newQuantity);
+        book.setAvailableCopies(newAvailable);
+        book.setAvailable(newAvailable > 0);
+        book.setTag(newAvailable > 0 ? "AVAILABLE" : "UNAVAILABLE");
+
+        Book savedBook = bookRepository.save(book);
+        return ResponseEntity.ok(savedBook);
     }
 
     @DeleteMapping("/librarian/books/{bookId}")
@@ -283,13 +340,15 @@ public class LibraryController {
         Book book = bookRepository.findById(bookId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Book not found."));
 
-        // Update fields
         book.setAvailable(available);
         if (available) {
             book.setTag("AVAILABLE");
+            if (book.getAvailableCopies() == null || book.getAvailableCopies() == 0) {
+                book.setAvailableCopies(book.getQuantity() != null ? book.getQuantity() : 1);
+            }
         } else {
-            // Librarian marks unavailable (e.g. for maintenance)
             book.setTag("UNAVAILABLE");
+            book.setAvailableCopies(0);
         }
 
         Book updatedBook = bookRepository.save(book);
@@ -307,16 +366,6 @@ public class LibraryController {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Role mismatch");
             }
         }
-        // Auto-create student if not exists
-        if ("STUDENT".equalsIgnoreCase(role.trim())) {
-            User newUser = userRepository.save(new User(username.trim(), "STUDENT"));
-            return ResponseEntity.ok(newUser);
-        }
-        // Auto-create librarian for testing/ease of use if it's librarian1
-        if ("LIBRARIAN".equalsIgnoreCase(role.trim()) && "librarian1".equalsIgnoreCase(username.trim())) {
-            User newUser = userRepository.save(new User("librarian1", "LIBRARIAN"));
-            return ResponseEntity.ok(newUser);
-        }
         throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found.");
     }
 
@@ -324,5 +373,63 @@ public class LibraryController {
     public ResponseEntity<List<User>> getAllUsers(@RequestHeader(value = "X-User-Role", required = false) String role) {
         validateLibrarian(role);
         return ResponseEntity.ok(userRepository.findAll());
+    }
+
+    @PostMapping("/librarian/users")
+    public ResponseEntity<User> createUser(
+            @RequestHeader(value = "X-User-Role", required = false) String roleHeader,
+            @RequestBody User user) {
+        validateLibrarian(roleHeader);
+
+        if (user.getUsername() == null || user.getUsername().trim().isEmpty() ||
+                user.getRole() == null || user.getRole().trim().isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Username and role are required.");
+        }
+
+        if (userRepository.findByUsername(user.getUsername().trim()).isPresent()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "A user with the same username already exists.");
+        }
+
+        User newUser = new User(user.getUsername().trim(), user.getRole().toUpperCase().trim());
+        newUser.setName(user.getName() != null ? user.getName().trim() : user.getUsername().trim());
+        
+        // Generate email if not explicitly provided or formatted
+        if (user.getEmail() == null || user.getEmail().trim().isEmpty()) {
+            if ("STUDENT".equalsIgnoreCase(newUser.getRole())) {
+                newUser.setEmail(newUser.getUsername().toLowerCase() + "@sgsits.ac.in");
+            } else {
+                String nameLower = newUser.getName().toLowerCase().replace(" ", "_");
+                newUser.setEmail(nameLower + "@sgsits.ac.in");
+            }
+        } else {
+            newUser.setEmail(user.getEmail().trim());
+        }
+
+        User savedUser = userRepository.save(newUser);
+        return ResponseEntity.status(HttpStatus.CREATED).body(savedUser);
+    }
+
+    @DeleteMapping("/librarian/users/{id}")
+    public ResponseEntity<Void> deleteUser(
+            @RequestHeader(value = "X-User-Role", required = false) String roleHeader,
+            @PathVariable Long id) {
+        validateLibrarian(roleHeader);
+
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found."));
+
+        // Clean up issues for this deleted student/member
+        List<BookIssue> issues = bookIssueRepository.findByStudentIdAndReturnDateIsNull(id);
+        for (BookIssue issue : issues) {
+            bookRepository.findById(issue.getBookId()).ifPresent(b -> {
+                b.setAvailable(true);
+                b.setTag("AVAILABLE");
+                bookRepository.save(b);
+            });
+        }
+        bookIssueRepository.deleteAll(issues);
+
+        userRepository.delete(user);
+        return ResponseEntity.noContent().build();
     }
 }

@@ -67,7 +67,7 @@ export class LibraryService {
     if (!user) return;
 
     const headers = new HttpHeaders()
-      .set('X-User-Role', 'STUDENT')
+      .set('X-User-Role', user.role.toUpperCase())
       .set('X-User-Id', user.id);
 
     this.http.get<any>('/api/student/dashboard', { headers }).pipe(
@@ -132,8 +132,8 @@ export class LibraryService {
     if (diffTime < 0) return 0;
 
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-    // 1 rupee per day after due date (14 days from issue)
-    const overdueDays = diffDays - 14;
+    // 1 rupee per day after due date (30 days from issue)
+    const overdueDays = diffDays - 30;
     return overdueDays > 0 ? overdueDays * 1.0 : 0;
   }
 

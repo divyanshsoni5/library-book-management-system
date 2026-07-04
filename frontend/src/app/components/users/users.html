@@ -126,7 +126,7 @@
               [(ngModel)]="userForm.enrollmentNo" 
               #enrollmentInput="ngModel"
               required 
-              pattern="0801[a-zA-Z0-9]{6}"
+              pattern="0801[a-zA-Z0-9]{6,8}"
               class="form-input-control" 
               placeholder="e.g. 0801CS241001" />
             <div class="small text-muted mt-1" style="font-size: 0.75rem; color: var(--text-muted);">Must start with 0801 (e.g., 0801CS241001). Student email is automatically derived.</div>
@@ -148,6 +148,14 @@
         } @else if (userForm.role === 'Teacher') {
           <div class="form-group">
             <div class="small text-muted" style="font-size: 0.8rem; color: var(--text-muted); background: var(--bg-card-hover); padding: 0.5rem 0.75rem; border-radius: 4px;">Teacher email will be automatically formatted as: <code>firstname_lastname@sgsits.ac.in</code>.</div>
+          </div>
+        }
+
+        <!-- Error Message Display -->
+        @if (errorMessage) {
+          <div class="error-alert" style="margin: 1rem 0 0 0; color: #d93025; background-color: #fce8e6; border: 1px solid #fad2cf; padding: 0.75rem 1rem; border-radius: 4px; display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem;">
+            <i class="bi bi-exclamation-circle-fill" style="color: #d93025; font-size: 1.1rem;"></i>
+            <span>{{ errorMessage }}</span>
           </div>
         }
 

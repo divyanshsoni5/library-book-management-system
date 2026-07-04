@@ -1,7 +1,7 @@
 import { Injectable, signal, inject } from '@angular/core';
 import { HttpClient, HttpParams, HttpHeaders } from '@angular/common/http';
 import { Observable, of, throwError } from 'rxjs';
-import { map, catchError } from 'rxjs/operators';
+import { map, catchError, switchMap } from 'rxjs/operators';
 import { User } from '../models/models';
 
 @Injectable({
@@ -42,12 +42,19 @@ export class UserService {
   }
 
   private mapBackendUser(backendUser: any): User {
+    let finalRole: 'Student' | 'Teacher' | 'Librarian' = 'Student';
+    if (backendUser.role === 'LIBRARIAN') {
+      finalRole = 'Librarian';
+    } else if (backendUser.role === 'TEACHER') {
+      finalRole = 'Teacher';
+    }
     return {
       id: `${backendUser.id}`,
-      name: backendUser.username,
-      email: backendUser.role === 'LIBRARIAN' ? `${backendUser.username}@sgsits.ac.in` : `${backendUser.username}@student.com`,
-      role: backendUser.role === 'LIBRARIAN' ? 'Librarian' : 'Student',
-      enrollmentNo: backendUser.role === 'STUDENT' ? backendUser.username : undefined
+      name: backendUser.name || backendUser.username,
+      email: backendUser.email || (backendUser.role === 'LIBRARIAN' ? `${backendUser.username}@sgsits.ac.in` : `${backendUser.username}@student.com`),
+      role: finalRole,
+      enrollmentNo: backendUser.role === 'STUDENT' ? backendUser.username : undefined,
+      teacherId: backendUser.role === 'TEACHER' ? backendUser.username : undefined
     };
   }
 
@@ -55,8 +62,7 @@ export class UserService {
    * Login as a Student, Teacher, or Librarian via backend REST API.
    */
   login(role: 'Student' | 'Teacher' | 'Librarian', identifier: string): Observable<boolean> {
-    // Since backend role is either STUDENT or LIBRARIAN, map Teacher/Student to STUDENT
-    const backendRole = role === 'Librarian' ? 'LIBRARIAN' : 'STUDENT';
+    const backendRole = role.toUpperCase();
     const params = new HttpParams()
       .set('username', identifier.trim())
       .set('role', backendRole);
@@ -65,11 +71,6 @@ export class UserService {
       map(backendUser => {
         if (backendUser && backendUser.id) {
           const user = this.mapBackendUser(backendUser);
-          // Preserve Teacher role in UI if they selected Teacher
-          if (role === 'Teacher') {
-            user.role = 'Teacher';
-            user.teacherId = identifier;
-          }
           this.currentUserSignal.set(user);
           localStorage.setItem(this.USER_STORAGE_KEY, JSON.stringify(user));
           if (user.role === 'Librarian') {
@@ -96,61 +97,82 @@ export class UserService {
     localStorage.removeItem(this.USER_STORAGE_KEY);
   }
 
-  /**
-   * Fetch all registered users (only for Librarians).
-   */
-  refreshUsers(): void {
+  getUsersObservable(): Observable<User[]> {
     const currentUser = this.currentUser();
-    if (!currentUser || currentUser.role !== 'Librarian') return;
+    if (!currentUser || currentUser.role !== 'Librarian') return of([]);
 
     const headers = new HttpHeaders()
       .set('X-User-Role', 'LIBRARIAN')
       .set('X-User-Id', currentUser.id);
 
-    this.http.get<any[]>('/api/librarian/users', { headers }).pipe(
+    return this.http.get<any[]>('/api/librarian/users', { headers }).pipe(
       map(users => users.map(u => this.mapBackendUser(u))),
       catchError(err => {
-        console.error('Failed to load users', err);
+        console.error('Failed to load users via backend', err);
         return of([]);
       })
-    ).subscribe(mappedUsers => {
+    );
+  }
+
+  /**
+   * Fetch all registered users (only for Librarians).
+   */
+  refreshUsers(): void {
+    this.getUsersObservable().subscribe(mappedUsers => {
       this.usersSignal.set(mappedUsers);
     });
   }
 
-  /**
-   * Add a new user via API (Librarian only).
-   */
-  addUser(userData: Omit<User, 'id'>): void {
-    const headers = { 'X-User-Role': 'LIBRARIAN' };
+  addUser(userData: Omit<User, 'id'>): Observable<boolean> {
+    const headers = new HttpHeaders()
+      .set('X-User-Role', 'LIBRARIAN')
+      .set('X-User-Id', this.currentUser()?.id || '');
+
+    // Resolve the appropriate login username for the backend
+    let username = '';
+    if (userData.role === 'Student') {
+      username = userData.enrollmentNo || '';
+    } else if (userData.role === 'Teacher') {
+      username = userData.email || '';
+    } else if (userData.role === 'Librarian') {
+      username = userData.password || 'admin';
+    }
+
     const backendUser = {
-      username: userData.name,
-      role: userData.role.toUpperCase()
+      username: username,
+      role: userData.role.toUpperCase(),
+      name: userData.name,
+      email: userData.email
     };
 
-    this.http.post<any>('/api/librarian/users', backendUser, { headers }).subscribe({
-      next: () => { this.refreshUsers(); },
-      error: (err) => {
-        console.warn('Backend POST /api/librarian/users not implemented yet. Adding user to local state.', err);
-        const nextId = String(Math.max(...this.usersSignal().map(u => Number(u.id) || 0), 0) + 1);
-        this.usersSignal.set([...this.usersSignal(), { ...userData, id: nextId }]);
-      }
-    });
+    return this.http.post<any>('/api/librarian/users', backendUser, { headers }).pipe(
+      switchMap(() => this.getUsersObservable()),
+      map(users => {
+        this.usersSignal.set(users);
+        return true;
+      }),
+      catchError(err => {
+        console.error('Failed to add user via backend API', err);
+        return throwError(() => err);
+      })
+    );
   }
 
-  /**
-   * Delete a user via API (Librarian only).
-   */
-  deleteUser(id: string): void {
-    const headers = { 'X-User-Role': 'LIBRARIAN' };
+  deleteUser(id: string): Observable<void> {
+    const headers = new HttpHeaders()
+      .set('X-User-Role', 'LIBRARIAN')
+      .set('X-User-Id', this.currentUser()?.id || '');
 
-    this.http.delete<void>(`/api/librarian/users/${id}`, { headers }).subscribe({
-      next: () => { this.refreshUsers(); },
-      error: (err) => {
-        console.warn(`Backend DELETE /api/librarian/users/${id} not implemented. Deleting from local state.`, err);
-        this.usersSignal.set(this.usersSignal().filter(u => u.id !== id));
-      }
-    });
+    return this.http.delete<void>(`/api/librarian/users/${id}`, { headers }).pipe(
+      switchMap(() => this.getUsersObservable()),
+      map(users => {
+        this.usersSignal.set(users);
+      }),
+      catchError(err => {
+        console.error(`Failed to delete user via backend API`, err);
+        return throwError(() => err);
+      })
+    );
   }
 
   /**

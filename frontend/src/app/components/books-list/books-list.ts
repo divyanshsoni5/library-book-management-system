@@ -1,4 +1,4 @@
-import { Component, inject, signal, computed, Input } from '@angular/core';
+import { Component, inject, signal, computed, Input, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { BookService } from '../../services/book.service';
@@ -21,6 +21,7 @@ interface BookForm {
 })
 export class BooksListComponent {
   bookService = inject(BookService);
+  private cdr = inject(ChangeDetectorRef);
   
   @Input() role: 'Student' | 'Teacher' | 'Librarian' = 'Student';
 
@@ -113,7 +114,12 @@ export class BooksListComponent {
           isbn: this.bookForm.isbn,
           quantity: this.bookForm.quantity
         };
-        this.bookService.updateBook(updatedBook);
+        this.bookService.updateBook(updatedBook).subscribe({
+          next: () => {
+            this.cdr.detectChanges();
+          },
+          error: err => console.error('Save updated book failed', err)
+        });
       }
     } else {
       this.bookService.addBook({
@@ -122,6 +128,11 @@ export class BooksListComponent {
         category: this.bookForm.category,
         isbn: this.bookForm.isbn,
         quantity: this.bookForm.quantity
+      }).subscribe({
+        next: () => {
+          this.cdr.detectChanges();
+        },
+        error: err => console.error('Save new book failed', err)
       });
     }
     this.closeModal();
@@ -132,7 +143,12 @@ export class BooksListComponent {
    */
   deleteBook(id: string): void {
     if (confirm('Are you sure you want to delete this book from the library?')) {
-      this.bookService.deleteBook(id);
+      this.bookService.deleteBook(id).subscribe({
+        next: () => {
+          this.cdr.detectChanges();
+        },
+        error: err => console.error('Delete book failed', err)
+      });
     }
   }
 }

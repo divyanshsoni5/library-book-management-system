@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject, signal, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { UserService } from '../../services/user.service';
@@ -12,6 +12,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 })
 export class LoginComponent {
   private userService = inject(UserService);
+  private cdr = inject(ChangeDetectorRef);
 
   selectedRole = signal<'Student' | 'Teacher' | 'Librarian'>('Student');
   identifierInput = '';
@@ -38,14 +39,22 @@ export class LoginComponent {
           } else {
             this.errorMessage = `Invalid credentials for ${this.selectedRole()}.`;
           }
+          this.cdr.detectChanges();
         }
       },
       error: (err: HttpErrorResponse) => {
+        console.log('Login error response body:', err.error);
         if (err.status === 0) {
-          this.errorMessage = '⚠️ Cannot connect to server. Make sure the backend is running on port 8080.';
+          this.errorMessage = '⚠️ Cannot connect to server. Make sure the backend is running on port 8082.';
+        } else if (err.error && err.error.message) {
+          this.errorMessage = err.error.message;
+        } else if (typeof err.error === 'string') {
+          this.errorMessage = err.error;
         } else {
-          this.errorMessage = `Server error (${err.status}): ${err.message}`;
+          this.errorMessage = err.message || 'Login failed. Please try again.';
         }
+        console.log('Assigned errorMessage:', this.errorMessage);
+        this.cdr.detectChanges();
       }
     });
   }
