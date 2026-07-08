@@ -1,5 +1,7 @@
 package com.librarymanagement.library_management.controller;
 
+import com.librarymanagement.library_management.dto.ActiveIssueDto;
+import com.librarymanagement.library_management.dto.FineStatusDto;
 import com.librarymanagement.library_management.dto.IssuedBookDetailDto;
 import com.librarymanagement.library_management.dto.StudentDashboardDto;
 import com.librarymanagement.library_management.model.Book;
@@ -22,7 +24,7 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api")
+@RequestMapping("/api/v1/library")
 @CrossOrigin(origins = "*", allowedHeaders = "*")
 public class LibraryController {
 
@@ -39,14 +41,14 @@ public class LibraryController {
     }
 
     // Helper method to validate student/teacher role and credentials
-    private User validateStudent(String roleHeader, Long idHeader) {
-        if (roleHeader == null || (!"STUDENT".equalsIgnoreCase(roleHeader.trim()) && !"TEACHER".equalsIgnoreCase(roleHeader.trim()))) {
+    private User validateStudent(String role, Long userId) {
+        if (role == null || (!"STUDENT".equalsIgnoreCase(role.trim()) && !"TEACHER".equalsIgnoreCase(role.trim()))) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied. Student/Teacher role required.");
         }
-        if (idHeader == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Missing X-User-Id header.");
+        if (userId == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Missing student identity in JWT.");
         }
-        return userRepository.findById(idHeader)
+        return userRepository.findById(userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found."));
     }
 
@@ -61,8 +63,8 @@ public class LibraryController {
 
     @GetMapping("/student/books")
     public ResponseEntity<List<Book>> getBooksForStudent(
-            @RequestHeader(value = "X-User-Role", required = false) String role,
-            @RequestHeader(value = "X-User-Id", required = false) Long userId,
+            @RequestAttribute(value = "jwtRole", required = false) String role,
+            @RequestAttribute(value = "jwtStudentId", required = false) Long userId,
             @RequestParam(value = "search", required = false) String search) {
         validateStudent(role, userId);
 
@@ -77,8 +79,8 @@ public class LibraryController {
 
     @GetMapping("/student/dashboard")
     public ResponseEntity<StudentDashboardDto> getStudentDashboard(
-            @RequestHeader(value = "X-User-Role", required = false) String role,
-            @RequestHeader(value = "X-User-Id", required = false) Long userId,
+            @RequestAttribute(value = "jwtRole", required = false) String role,
+            @RequestAttribute(value = "jwtStudentId", required = false) Long userId,
             @RequestParam(value = "simulatedDate", required = false) String simulatedDateStr) {
         User student = validateStudent(role, userId);
 
@@ -133,14 +135,14 @@ public class LibraryController {
     // LIBRARIAN ENDPOINTS
 
     @GetMapping("/librarian/issues")
-    public ResponseEntity<List<BookIssue>> getAllIssues(@RequestHeader(value = "X-User-Role", required = false) String role) {
+    public ResponseEntity<List<BookIssue>> getAllIssues(@RequestAttribute(value = "jwtRole", required = false) String role) {
         validateLibrarian(role);
         return ResponseEntity.ok(bookIssueRepository.findAll());
     }
 
     @PostMapping("/librarian/issues")
     public ResponseEntity<BookIssue> issueBookForStudent(
-            @RequestHeader(value = "X-User-Role", required = false) String role,
+            @RequestAttribute(value = "jwtRole", required = false) String role,
             @RequestParam Long studentId,
             @RequestParam Long bookId) {
         validateLibrarian(role);
@@ -181,7 +183,7 @@ public class LibraryController {
 
     @PostMapping("/librarian/returns")
     public ResponseEntity<Map<String, Object>> returnBookForStudent(
-            @RequestHeader(value = "X-User-Role", required = false) String role,
+            @RequestAttribute(value = "jwtRole", required = false) String role,
             @RequestParam Long studentId,
             @RequestParam Long bookId) {
         validateLibrarian(role);
@@ -217,7 +219,6 @@ public class LibraryController {
         }
 
         Map<String, Object> response = new HashMap<>();
-        response.put("message", "Book returned successfully");
         response.put("bookId", book.getId());
         response.put("studentId", student.getId());
         response.put("title", book.getTitle());
@@ -231,7 +232,7 @@ public class LibraryController {
 
     @GetMapping("/librarian/books")
     public ResponseEntity<List<Book>> getAllBooksForLibrarian(
-            @RequestHeader(value = "X-User-Role", required = false) String role,
+            @RequestAttribute(value = "jwtRole", required = false) String role,
             @RequestParam(value = "search", required = false) String search) {
         validateLibrarian(role);
         List<Book> books;
@@ -245,7 +246,7 @@ public class LibraryController {
 
     @PostMapping("/librarian/books")
     public ResponseEntity<Book> addBook(
-            @RequestHeader(value = "X-User-Role", required = false) String role,
+            @RequestAttribute(value = "jwtRole", required = false) String role,
             @RequestBody Book book) {
         validateLibrarian(role);
 
@@ -275,7 +276,7 @@ public class LibraryController {
 
     @PutMapping("/librarian/books/{bookId}")
     public ResponseEntity<Book> updateBook(
-            @RequestHeader(value = "X-User-Role", required = false) String roleHeader,
+            @RequestAttribute(value = "jwtRole", required = false) String roleHeader,
             @PathVariable Long bookId,
             @RequestBody Book updatedBook) {
         validateLibrarian(roleHeader);
@@ -314,8 +315,8 @@ public class LibraryController {
     }
 
     @DeleteMapping("/librarian/books/{bookId}")
-    public ResponseEntity<Void> deleteBook(
-            @RequestHeader(value = "X-User-Role", required = false) String role,
+    public ResponseEntity<Map<String, Object>> deleteBook(
+            @RequestAttribute(value = "jwtRole", required = false) String role,
             @PathVariable Long bookId) {
         validateLibrarian(role);
 
@@ -327,12 +328,15 @@ public class LibraryController {
         // But for simplicity, we allow deleting and cleaning up any active issues if
         // they exist.
         bookRepository.delete(book);
-        return ResponseEntity.noContent().build();
+        Map<String, Object> response = new HashMap<>();
+        response.put("deleted", true);
+        response.put("bookId", bookId);
+        return ResponseEntity.ok(response);
     }
 
     @PutMapping("/librarian/books/{bookId}/availability")
     public ResponseEntity<Book> updateBookAvailability(
-            @RequestHeader(value = "X-User-Role", required = false) String role,
+            @RequestAttribute(value = "jwtRole", required = false) String role,
             @PathVariable Long bookId,
             @RequestParam boolean available) {
         validateLibrarian(role);
@@ -370,14 +374,14 @@ public class LibraryController {
     }
 
     @GetMapping("/librarian/users")
-    public ResponseEntity<List<User>> getAllUsers(@RequestHeader(value = "X-User-Role", required = false) String role) {
+    public ResponseEntity<List<User>> getAllUsers(@RequestAttribute(value = "jwtRole", required = false) String role) {
         validateLibrarian(role);
         return ResponseEntity.ok(userRepository.findAll());
     }
 
     @PostMapping("/librarian/users")
     public ResponseEntity<User> createUser(
-            @RequestHeader(value = "X-User-Role", required = false) String roleHeader,
+            @RequestAttribute(value = "jwtRole", required = false) String roleHeader,
             @RequestBody User user) {
         validateLibrarian(roleHeader);
 
@@ -410,8 +414,8 @@ public class LibraryController {
     }
 
     @DeleteMapping("/librarian/users/{id}")
-    public ResponseEntity<Void> deleteUser(
-            @RequestHeader(value = "X-User-Role", required = false) String roleHeader,
+    public ResponseEntity<Map<String, Object>> deleteUser(
+            @RequestAttribute(value = "jwtRole", required = false) String roleHeader,
             @PathVariable Long id) {
         validateLibrarian(roleHeader);
 
@@ -430,6 +434,66 @@ public class LibraryController {
         bookIssueRepository.deleteAll(issues);
 
         userRepository.delete(user);
-        return ResponseEntity.noContent().build();
+        Map<String, Object> response = new HashMap<>();
+        response.put("deleted", true);
+        response.put("userId", id);
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/students/{studentId}/fine-status")
+    public ResponseEntity<FineStatusDto> getFineStatus(
+            @RequestAttribute(value = "jwtRole", required = false) String role,
+            @RequestAttribute(value = "jwtStudentId", required = false) Long jwtStudentId,
+            @PathVariable Long studentId) {
+        authorizeStudentScope(role, jwtStudentId, studentId);
+
+        User student = userRepository.findById(studentId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Student not found."));
+
+        if (!"STUDENT".equalsIgnoreCase(student.getRole()) && !"TEACHER".equalsIgnoreCase(student.getRole())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "User must be a student or a teacher.");
+        }
+
+        double totalFine = calculateTotalFine(studentId, LocalDate.now());
+        FineStatusDto response = new FineStatusDto(studentId, totalFine > 0.0, totalFine);
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/students/{studentId}/has-active-issue")
+    public ResponseEntity<ActiveIssueDto> hasActiveIssue(
+            @RequestAttribute(value = "jwtRole", required = false) String role,
+            @RequestAttribute(value = "jwtStudentId", required = false) Long jwtStudentId,
+            @PathVariable Long studentId) {
+        authorizeStudentScope(role, jwtStudentId, studentId);
+
+        boolean hasActiveIssue = !bookIssueRepository.findByStudentIdAndReturnDateIsNull(studentId).isEmpty();
+        return ResponseEntity.ok(new ActiveIssueDto(studentId, hasActiveIssue));
+    }
+
+    private void authorizeStudentScope(String role, Long jwtStudentId, Long studentId) {
+        if (role == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Missing JWT role.");
+        }
+        if ("LIBRARIAN".equalsIgnoreCase(role)) {
+            return;
+        }
+        if (!"STUDENT".equalsIgnoreCase(role) && !"TEACHER".equalsIgnoreCase(role)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied.");
+        }
+        if (jwtStudentId == null || !jwtStudentId.equals(studentId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied for this student.");
+        }
+    }
+
+    private double calculateTotalFine(Long studentId, LocalDate referenceDate) {
+        List<BookIssue> activeIssues = bookIssueRepository.findByStudentIdAndReturnDateIsNull(studentId);
+        double totalFine = 0.0;
+        for (BookIssue issue : activeIssues) {
+            if (referenceDate.isAfter(issue.getDueDate())) {
+                long daysOverdue = ChronoUnit.DAYS.between(issue.getDueDate(), referenceDate);
+                totalFine += daysOverdue;
+            }
+        }
+        return totalFine;
     }
 }

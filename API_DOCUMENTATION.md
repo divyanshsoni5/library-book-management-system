@@ -1,13 +1,28 @@
 # Library Management System - Backend API Documentation
 
-The backend service is built using Spring Boot. All API requests are prefixed with `/api`. Cross-Origin Resource Sharing (CORS) is enabled for all origins.
+The backend service is built using Spring Boot. All API requests are prefixed with `/api/v1/library`. Cross-Origin Resource Sharing (CORS) is enabled for all origins.
 
 ---
 
-## Authentication & Headers
-Several endpoints require user validation. This is managed using custom request headers:
-* `X-User-Role`: Specifies the user role (`STUDENT`, `TEACHER`, or `LIBRARIAN`).
-* `X-User-Id`: Specifies the database ID of the user requesting the action.
+## Authentication
+Protected endpoints now use JWTs passed through the `Authorization: Bearer <token>` header.
+
+The token is decoded by the backend and the following claims are used:
+* `role`: `STUDENT`, `TEACHER`, or `LIBRARIAN`
+* `studentId`: the user ID for student/teacher scoped requests
+
+The old `X-User-Role` and `X-User-Id` headers are no longer used.
+
+## Standard Response Format
+Success responses are wrapped as:
+```json
+{ "success": true, "data": { ... }, "message": "Success" }
+```
+
+Errors are wrapped as:
+```json
+{ "success": false, "error": "ERROR_CODE", "message": "..." }
+```
 
 ---
 
@@ -19,7 +34,7 @@ Authenticates an existing user by username and role.
   * If the role is `STUDENT` and the username does not exist, the student account is automatically created.
   * If the role is `LIBRARIAN` and the username is `librarian1`, the librarian account is automatically created for ease of testing.
 
-* **Path**: `/api/users/login`
+* **Path**: `/api/v1/library/users/login`
 * **HTTP Method**: `POST`
 * **Query Parameters**:
   * `username` (String): The username of the user (e.g., `john_doe` or `librarian1`).
@@ -49,7 +64,7 @@ Host: localhost:8082
 ### 2. Get All Users (Librarian Only)
 Retrieves a list of all registered users in the system.
 
-* **Path**: `/api/librarian/users`
+* **Path**: `/api/v1/library/librarian/users`
 * **HTTP Method**: `GET`
 * **Headers**:
   * `X-User-Role` (String): Must be `LIBRARIAN`
@@ -87,7 +102,7 @@ X-User-Role: LIBRARIAN
 ### 1. Get Books for Student
 Retrieves the list of all books or searches books by matching title/author keyword.
 
-* **Path**: `/api/student/books`
+* **Path**: `/api/v1/library/student/books`
 * **HTTP Method**: `GET`
 * **Headers**:
   * `X-User-Role` (String): Must be `STUDENT`
@@ -127,7 +142,7 @@ X-User-Id: 1
 ### 2. Get All Books for Librarian
 Retrieves the list of all books or searches books by matching title/author keyword for the librarian.
 
-* **Path**: `/api/librarian/books`
+* **Path**: `/api/v1/library/librarian/books`
 * **HTTP Method**: `GET`
 * **Headers**:
   * `X-User-Role` (String): Must be `LIBRARIAN`
