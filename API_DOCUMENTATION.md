@@ -175,6 +175,37 @@ X-User-Role: LIBRARIAN
 
 ---
 
+### 3. Student Fine Status
+Returns whether a student has pending fines and the current total fine amount.
+
+* **Path**: `/api/v1/library/students/{studentId}/fine-status`
+* **HTTP Method**: `GET`
+* **Response**:
+```json
+{
+  "studentId": 42,
+  "hasPendingFine": true,
+  "totalFineAmount": 15.0
+}
+```
+
+---
+
+### 4. Student Active Issue Status
+Returns whether a student currently has any active book issue.
+
+* **Path**: `/api/v1/library/students/{studentId}/has-active-issue`
+* **HTTP Method**: `GET`
+* **Response**:
+```json
+{
+  "studentId": 42,
+  "hasActiveIssue": true
+}
+```
+
+---
+
 ### 3. Add Book (Librarian Only)
 Adds a new book to the library catalog.
 

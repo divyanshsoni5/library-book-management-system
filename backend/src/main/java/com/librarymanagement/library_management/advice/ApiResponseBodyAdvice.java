@@ -26,7 +26,10 @@ public class ApiResponseBodyAdvice implements ResponseBodyAdvice<Object> {
         }
 
         HttpServletRequest servletRequest = (HttpServletRequest) request.getServletRequest();
-        if (servletRequest.getRequestURI().endsWith("/health")) {
+        String requestUri = servletRequest.getRequestURI();
+        if (requestUri.endsWith("/health")
+                || requestUri.matches(".*/students/[^/]+/fine-status$")
+                || requestUri.matches(".*/students/[^/]+/has-active-issue$")) {
             return body;
         }
 
