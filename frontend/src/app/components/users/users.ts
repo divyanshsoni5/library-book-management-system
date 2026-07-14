@@ -8,9 +8,9 @@ import { User } from '../../models/models';
 interface UserForm {
   name: string;
   email: string;
-  role: 'Student' | 'Teacher' | 'Librarian';
+  role: 'Student' | 'Faculty' | 'Librarian';
   enrollmentNo?: string;
-  teacherId?: string;
+  facultyId?: string;
   password?: string;
 }
 
@@ -35,7 +35,7 @@ export class UsersComponent {
     email: '',
     role: 'Student',
     enrollmentNo: '',
-    teacherId: '',
+    facultyId: '',
     password: ''
   };
 
@@ -55,7 +55,7 @@ export class UsersComponent {
       email: '',
       role: 'Student',
       enrollmentNo: '',
-      teacherId: '',
+      facultyId: '',
       password: ''
     };
   }
@@ -63,7 +63,7 @@ export class UsersComponent {
   onRoleChange(): void {
     // Reset specific fields when role toggles
     this.userForm.enrollmentNo = '';
-    this.userForm.teacherId = '';
+    this.userForm.facultyId = '';
     this.userForm.password = '';
   }
 
@@ -75,7 +75,7 @@ export class UsersComponent {
     const nameLower = this.userForm.name.trim().toLowerCase().replace(/\s+/g, '_');
     let finalEmail = '';
     let finalEnrollment = undefined;
-    let finalTeacherId = undefined;
+    let finalFacultyId = undefined;
     let finalPassword = undefined;
 
     if (this.userForm.role === 'Student') {
@@ -84,8 +84,8 @@ export class UsersComponent {
       finalEmail = `${enrollment.toLowerCase()}@sgsits.ac.in`;
     } else {
       finalEmail = `${nameLower}@sgsits.ac.in`;
-      if (this.userForm.role === 'Teacher') {
-        finalTeacherId = finalEmail;
+      if (this.userForm.role === 'Faculty') {
+        finalFacultyId = finalEmail;
       } else if (this.userForm.role === 'Librarian') {
         finalPassword = this.userForm.password?.trim() || 'admin';
       }
@@ -96,7 +96,7 @@ export class UsersComponent {
       email: finalEmail,
       role: this.userForm.role,
       enrollmentNo: finalEnrollment,
-      teacherId: finalTeacherId,
+      facultyId: finalFacultyId,
       password: finalPassword
     };
 

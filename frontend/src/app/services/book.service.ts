@@ -47,7 +47,7 @@ export class BookService {
   /**
    * Load books from the backend.
    * Librarians use the dedicated /api/librarian/books endpoint (with LIBRARIAN headers).
-   * Students/Teachers use /api/student/books (with STUDENT headers).
+   * Students/Faculty use /api/student/books (with STUDENT headers).
    */
   getBooksObservable(): Observable<Book[]> {
     const currentUser = this.userService.currentUser();
@@ -71,7 +71,7 @@ export class BookService {
   }
 
   /**
-   * Students/Teachers use /api/student/books (with STUDENT headers).
+   * Students/Faculty use /api/student/books (with STUDENT headers).
    */
   refreshBooks(): void {
     this.getBooksObservable().subscribe(books => {

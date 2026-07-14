@@ -30,7 +30,7 @@ export class IssueBookComponent {
 
   // Get active standard users (not librarians)
   availableUsers = computed(() => {
-    return this.userService.users().filter(u => u.role === 'Student' || u.role === 'Teacher');
+    return this.userService.users().filter(u => u.role === 'Student' || u.role === 'Faculty');
   });
 
   // Get books with at least 1 copy available

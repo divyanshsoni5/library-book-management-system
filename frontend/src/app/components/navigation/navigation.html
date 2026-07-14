@@ -17,8 +17,8 @@
     <span>Books</span>
   </button>
 
-  <!-- My Books Tab (Student & Teacher only) -->
-  @if (role === 'Student' || role === 'Teacher') {
+  <!-- My Books Tab (Student & Faculty only) -->
+  @if (role === 'Student' || role === 'Faculty') {
     <button 
       (click)="selectTab('my-books')" 
       class="nav-item" 

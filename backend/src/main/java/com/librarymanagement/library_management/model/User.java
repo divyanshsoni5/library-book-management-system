@@ -6,14 +6,13 @@ import jakarta.persistence.*;
 @Table(name = "users")
 public class User {
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @Column(nullable = false, unique = true)
     private String username;
 
     @Column(nullable = false)
-    private String role; // "STUDENT", "LIBRARIAN", "TEACHER"
+    private String role; // "STUDENT", "LIBRARIAN", "TEACHER", "FACULTY", "HEAD"
 
     private String name;
     private String email;

@@ -31,10 +31,10 @@
           <span class="details-label">Enrollment Number:</span>
           <span class="details-val"><code>{{ userService.currentUser()?.enrollmentNo }}</code></span>
         </div>
-      } @else if (userService.currentUser()?.role === 'Teacher') {
+      } @else if (userService.currentUser()?.role === 'Faculty') {
         <div class="details-row">
-          <span class="details-label">Teacher ID:</span>
-          <span class="details-val"><code>{{ userService.currentUser()?.teacherId }}</code></span>
+          <span class="details-label">Faculty ID:</span>
+          <span class="details-val"><code>{{ userService.currentUser()?.facultyId }}</code></span>
         </div>
       }
       <div class="details-row">

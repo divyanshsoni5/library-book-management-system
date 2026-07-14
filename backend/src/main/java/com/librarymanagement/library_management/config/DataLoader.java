@@ -45,7 +45,7 @@ public class DataLoader implements CommandLineRunner {
         divyansh = userRepository.save(divyansh);
 
         // Seed default teacher to match UI demo credentials
-        User teacher = new User("rajesh_kumar@sgsits.ac.in", "TEACHER", "Rajesh Kumar", "rajesh_kumar@sgsits.ac.in");
+        User teacher = new User("rajesh_kumar@sgsits.ac.in", "FACULTY", "Rajesh Kumar", "rajesh_kumar@sgsits.ac.in");
         userRepository.save(teacher);
 
         // Seed default books

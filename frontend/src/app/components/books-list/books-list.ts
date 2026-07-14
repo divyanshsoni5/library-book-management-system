@@ -23,7 +23,7 @@ export class BooksListComponent {
   bookService = inject(BookService);
   private cdr = inject(ChangeDetectorRef);
   
-  @Input() role: 'Student' | 'Teacher' | 'Librarian' = 'Student';
+  @Input() role: 'Student' | 'Faculty' | 'Librarian' = 'Student';
 
   // Signals for searching
   searchQuery = signal<string>('');

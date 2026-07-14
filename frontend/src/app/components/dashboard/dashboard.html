@@ -95,8 +95,8 @@
   </div>
 }
 
-<!-- STUDENT & TEACHER DASHBOARD VIEW -->
-@if (currentUser()?.role === 'Student' || currentUser()?.role === 'Teacher') {
+<!-- STUDENT & FACULTY DASHBOARD VIEW -->
+@if (currentUser()?.role === 'Student' || currentUser()?.role === 'Faculty') {
   <div class="grid-3">
     <div class="stat-card">
       <div class="stat-icon blue">

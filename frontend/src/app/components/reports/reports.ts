@@ -60,7 +60,7 @@ export class ReportsComponent {
 
     let activeIssues = this.libraryService.issuedBooks().filter(ib => !ib.returnDate && ib.dueDate < today);
 
-    // If Student or Teacher, filter only their own overdue books
+    // If Student or Faculty, filter only their own overdue books
     if (user.role !== 'Librarian') {
       activeIssues = activeIssues.filter(ib => ib.userId === user.id);
     }

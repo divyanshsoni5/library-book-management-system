@@ -8,5 +8,5 @@ import java.util.Optional;
 public interface BookIssueRepository extends JpaRepository<BookIssue, Long> {
     List<BookIssue> findByStudentIdAndReturnDateIsNull(Long studentId);
     
-    Optional<BookIssue> findByBookIdAndStudentIdAndReturnDateIsNull(Long bookId, Long studentId);
+    List<BookIssue> findByBookIdAndStudentIdAndReturnDateIsNull(Long bookId, Long studentId);
 }

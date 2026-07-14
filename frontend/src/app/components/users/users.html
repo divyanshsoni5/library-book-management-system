@@ -36,15 +36,15 @@
             </td>
             <td>{{ user.email }}</td>
             <td>
-              <span class="badge-solid" [class.blue]="user.role === 'Student'" [class.brown]="user.role === 'Teacher'" [class.red]="user.role === 'Librarian'">
+              <span class="badge-solid" [class.blue]="user.role === 'Student'" [class.brown]="user.role === 'Faculty'" [class.red]="user.role === 'Librarian'">
                 {{ user.role }}
               </span>
             </td>
             <td>
               @if (user.role === 'Student') {
                 <span class="small text-muted">Enrollment: <code>{{ user.enrollmentNo }}</code></span>
-              } @else if (user.role === 'Teacher') {
-                <span class="small text-muted">Teacher ID: <code>{{ user.teacherId }}</code></span>
+              } @else if (user.role === 'Faculty') {
+                <span class="small text-muted">Faculty ID: <code>{{ user.facultyId }}</code></span>
               } @else {
                 <span class="small text-muted">Password Protected</span>
               }
@@ -110,7 +110,7 @@
             class="form-input-control"
             style="padding: 0.55rem 0.75rem;">
             <option value="Student">Student</option>
-            <option value="Teacher">Teacher</option>
+            <option value="Faculty">Faculty</option>
             <option value="Librarian">Librarian (Staff)</option>
           </select>
         </div>
@@ -145,9 +145,9 @@
               placeholder="Password for credential verification..." />
             <div class="small text-muted mt-1" style="font-size: 0.75rem; color: var(--text-muted);">Email will be formatted as firstname_lastname@sgsits.ac.in.</div>
           </div>
-        } @else if (userForm.role === 'Teacher') {
+        } @else if (userForm.role === 'Faculty') {
           <div class="form-group">
-            <div class="small text-muted" style="font-size: 0.8rem; color: var(--text-muted); background: var(--bg-card-hover); padding: 0.5rem 0.75rem; border-radius: 4px;">Teacher email will be automatically formatted as: <code>firstname_lastname@sgsits.ac.in</code>.</div>
+            <div class="small text-muted" style="font-size: 0.8rem; color: var(--text-muted); background: var(--bg-card-hover); padding: 0.5rem 0.75rem; border-radius: 4px;">Faculty email will be automatically formatted as: <code>firstname_lastname@sgsits.ac.in</code>.</div>
           </div>
         }
 

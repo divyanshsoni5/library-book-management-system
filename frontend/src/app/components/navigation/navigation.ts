@@ -9,7 +9,7 @@ import { CommonModule } from '@angular/common';
 })
 export class NavigationComponent {
   @Input() activeTab: string = 'dashboard';
-  @Input() role: 'Student' | 'Teacher' | 'Librarian' = 'Student';
+  @Input() role: 'Student' | 'Faculty' | 'Librarian' = 'Student';
   
   @Output() tabChange = new EventEmitter<string>();
   @Output() addBookTriggered = new EventEmitter<void>();

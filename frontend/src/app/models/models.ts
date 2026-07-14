@@ -12,9 +12,9 @@ export interface User {
   id: string;
   name: string;
   email: string;
-  role: 'Student' | 'Teacher' | 'Librarian';
+  role: 'Student' | 'Faculty' | 'Librarian';
   enrollmentNo?: string;
-  teacherId?: string;
+  facultyId?: string;
   password?: string;
 }
 

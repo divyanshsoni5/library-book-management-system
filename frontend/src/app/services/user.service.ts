@@ -1,5 +1,5 @@
 import { Injectable, signal, inject } from '@angular/core';
-import { HttpClient, HttpParams, HttpHeaders } from '@angular/common/http';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Observable, of, throwError } from 'rxjs';
 import { map, catchError, switchMap } from 'rxjs/operators';
 import { User } from '../models/models';
@@ -15,21 +15,40 @@ export class UserService {
   users = this.usersSignal.asReadonly();
 
   // Writable signal for current logged in user
-  private currentUserSignal = signal<User | null>(this.loadCurrentUser());
+  private currentUserSignal = signal<User | null>(null);
   currentUser = this.currentUserSignal.asReadonly();
 
   constructor() {
-    // If we already have a logged in librarian, fetch all users on startup
-    const user = this.currentUser();
-    if (user && user.role === 'Librarian') {
-      this.refreshUsers();
-    }
+    this.initSession();
   }
 
   /**
    * Load active user from localStorage if logged in.
+   * Checks both the portal keys (sgsits_auth_user) and the local keys (lms_current_user).
    */
   private loadCurrentUser(): User | null {
+    // 1. Try reading from the common portal authentication key
+    const portalData = localStorage.getItem('sgsits_auth_user');
+    if (portalData) {
+      try {
+        const parsed = JSON.parse(portalData);
+        if (parsed && parsed.role) {
+          const mappedRole = this.mapAuthRole(parsed.role, parsed.subRole || '');
+          return {
+            id: String(parsed.id),
+            name: parsed.fullName || parsed.username,
+            email: parsed.email || '',
+            role: mappedRole,
+            enrollmentNo: mappedRole === 'Student' ? parsed.username : undefined,
+            facultyId: mappedRole === 'Faculty' ? parsed.username : undefined
+          };
+        }
+      } catch (e) {
+        console.error('Failed to parse portal user', e);
+      }
+    }
+
+    // 2. Fallback to local storage key
     const data = localStorage.getItem(this.USER_STORAGE_KEY);
     if (data) {
       try {
@@ -41,12 +60,119 @@ export class UserService {
     return null;
   }
 
+  /**
+   * Extract user and token from URL parameters or localStorage on startup.
+   */
+  private initSession(): void {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
+
+    if (token) {
+      const id = params.get('id');
+      const username = params.get('username');
+      const role = params.get('role');
+      const subRole = params.get('subRole');
+      const fullName = params.get('fullName');
+      const email = params.get('email');
+
+      let decoded: any = {};
+      try {
+        const base64Url = token.split('.')[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        decoded = JSON.parse(window.atob(base64));
+      } catch (e) {
+        console.warn('Could not decode JWT payload', e);
+      }
+
+      const valId = id || decoded.id || decoded.userId || decoded.sub || '1';
+      const valUsername = username || decoded.username || decoded.sub || '';
+      const valRole = role || decoded.role || decoded.roles || '';
+      const valSubRole = subRole || decoded.subRole || decoded.sub_role || '';
+      const valFullName = fullName || decoded.fullName || decoded.name || valUsername;
+      const valEmail = email || decoded.email || '';
+
+      // Determine the mapped role
+      const mappedRole = this.mapAuthRole(valRole, valSubRole);
+
+      const user: User = {
+        id: String(valId),
+        name: valFullName,
+        email: valEmail,
+        role: mappedRole,
+        enrollmentNo: mappedRole === 'Student' ? valUsername : undefined,
+        facultyId: mappedRole === 'Faculty' ? valUsername : undefined
+      };
+
+      // Save token and user details to localStorage under both portal and local keys
+      localStorage.setItem('sgsits_auth_token', token);
+      localStorage.setItem('sgsits_auth_user', JSON.stringify({
+        id: Number(valId),
+        username: valUsername,
+        role: valRole,
+        subRole: valSubRole,
+        fullName: valFullName,
+        email: valEmail
+      }));
+      localStorage.setItem('lms_auth_token', token);
+      localStorage.setItem(this.USER_STORAGE_KEY, JSON.stringify(user));
+      
+      this.currentUserSignal.set(user);
+
+      // Clean the URL query parameters so the token is not visible
+      const cleanUrl = window.location.origin + window.location.pathname;
+      window.history.replaceState({}, document.title, cleanUrl);
+    } else {
+      // Check localStorage fallback
+      const savedUser = this.loadCurrentUser();
+      const savedToken = this.getToken();
+      if (savedUser && savedToken) {
+        this.currentUserSignal.set(savedUser);
+      } else {
+        this.currentUserSignal.set(null);
+        // Redirect to external login service
+        this.redirectToLogin();
+      }
+    }
+
+    // If we already have a logged in librarian, fetch all users on startup
+    const user = this.currentUser();
+    if (user && user.role === 'Librarian') {
+      this.refreshUsers();
+    }
+  }
+
+  /**
+   * Helper method to map auth service roles to library roles.
+   */
+  private mapAuthRole(role: string, subRole: string): 'Student' | 'Faculty' | 'Librarian' {
+    const r = (role || '').toUpperCase();
+    const sr = (subRole || '').toUpperCase();
+
+    // 1. STAFF with LIBRARIAN subRole, or ADMIN role maps to Librarian
+    if ((r === 'STAFF' && sr === 'LIBRARIAN') || r === 'ADMIN') {
+      return 'Librarian';
+    }
+    // 2. FACULTY or HEAD (HOD) maps to Faculty
+    if (r === 'FACULTY' || r === 'HEAD') {
+      return 'Faculty';
+    }
+    // 3. STUDENT maps to Student
+    if (r === 'STUDENT') {
+      return 'Student';
+    }
+
+    // Fallbacks
+    if (sr.includes('LIBRARIAN')) return 'Librarian';
+    if (r.includes('TEACHER') || r.includes('FACULTY') || r.includes('HEAD') || r.includes('HOD')) return 'Faculty';
+    return 'Student';
+  }
+
   private mapBackendUser(backendUser: any): User {
-    let finalRole: 'Student' | 'Teacher' | 'Librarian' = 'Student';
+    let finalRole: 'Student' | 'Faculty' | 'Librarian' = 'Student';
     if (backendUser.role === 'LIBRARIAN') {
       finalRole = 'Librarian';
-    } else if (backendUser.role === 'TEACHER') {
-      finalRole = 'Teacher';
+    } else if (backendUser.role === 'TEACHER' || backendUser.role === 'FACULTY' || backendUser.role === 'HEAD') {
+      finalRole = 'Faculty';
     }
     return {
       id: `${backendUser.id}`,
@@ -54,47 +180,52 @@ export class UserService {
       email: backendUser.email || (backendUser.role === 'LIBRARIAN' ? `${backendUser.username}@sgsits.ac.in` : `${backendUser.username}@student.com`),
       role: finalRole,
       enrollmentNo: backendUser.role === 'STUDENT' ? backendUser.username : undefined,
-      teacherId: backendUser.role === 'TEACHER' ? backendUser.username : undefined
+      facultyId: (backendUser.role === 'TEACHER' || backendUser.role === 'FACULTY' || backendUser.role === 'HEAD') ? backendUser.username : undefined
     };
   }
 
   /**
-   * Login as a Student, Teacher, or Librarian via backend REST API.
+   * Returns the JWT token from localStorage.
    */
-  login(role: 'Student' | 'Teacher' | 'Librarian', identifier: string): Observable<boolean> {
-    const backendRole = role.toUpperCase();
-    const params = new HttpParams()
-      .set('username', identifier.trim())
-      .set('role', backendRole);
-
-    return this.http.post<any>('/api/users/login', null, { params }).pipe(
-      map(backendUser => {
-        if (backendUser && backendUser.id) {
-          const user = this.mapBackendUser(backendUser);
-          this.currentUserSignal.set(user);
-          localStorage.setItem(this.USER_STORAGE_KEY, JSON.stringify(user));
-          if (user.role === 'Librarian') {
-            this.refreshUsers();
-          }
-          return true;
-        }
-        return false;
-      }),
-      catchError(err => {
-        console.error('Login failed', err);
-        // Re-throw so the subscriber's error handler can show the right message
-        return throwError(() => err);
-      })
-    );
+  getToken(): string | null {
+    return localStorage.getItem('sgsits_auth_token') || localStorage.getItem('lms_auth_token');
   }
 
   /**
-   * Logout and clear session.
+   * Redirects the browser to the external portal login page.
+   * If running locally in dev mode (ports 4200/4201), redirects to port 4200.
+   * If running behind the gateway (port 8080/80), redirects to gateway root path.
+   */
+  redirectToLogin(): void {
+    const currentOrigin = window.location.origin;
+    if (currentOrigin.includes('4200') || currentOrigin.includes('4201')) {
+      // Dev environment: Redirect to the common portal UI running on port 4200
+      window.location.href = 'http://localhost:4200/';
+    } else {
+      // Production/Gateway environment: Redirect to the gateway root URL (e.g. http://localhost:8080/)
+      window.location.href = window.location.protocol + '//' + window.location.host + '/';
+    }
+  }
+
+  /**
+   * Stub login method for backward compatibility.
+   */
+  login(role: 'Student' | 'Faculty' | 'Librarian', identifier: string): Observable<boolean> {
+    this.redirectToLogin();
+    return of(false);
+  }
+
+  /**
+   * Logout and clear session, then redirect to the auth service.
    */
   logout(): void {
     this.currentUserSignal.set(null);
     this.usersSignal.set([]);
     localStorage.removeItem(this.USER_STORAGE_KEY);
+    localStorage.removeItem('lms_auth_token');
+    localStorage.removeItem('sgsits_auth_token');
+    localStorage.removeItem('sgsits_auth_user');
+    this.redirectToLogin();
   }
 
   getUsersObservable(): Observable<User[]> {
@@ -132,7 +263,7 @@ export class UserService {
     let username = '';
     if (userData.role === 'Student') {
       username = userData.enrollmentNo || '';
-    } else if (userData.role === 'Teacher') {
+    } else if (userData.role === 'Faculty') {
       username = userData.email || '';
     } else if (userData.role === 'Librarian') {
       username = userData.password || 'admin';
@@ -140,7 +271,7 @@ export class UserService {
 
     const backendUser = {
       username: username,
-      role: userData.role.toUpperCase(),
+      role: userData.role === 'Faculty' ? 'FACULTY' : userData.role.toUpperCase(),
       name: userData.name,
       email: userData.email
     };

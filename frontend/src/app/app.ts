@@ -1,7 +1,6 @@
 import { Component, inject, signal, ViewChild, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { UserService } from './services/user.service';
-import { LoginComponent } from './components/login/login';
 import { HeaderComponent } from './components/header/header';
 import { NavigationComponent } from './components/navigation/navigation';
 import { BooksListComponent } from './components/books-list/books-list';
@@ -18,7 +17,6 @@ import { ReportsComponent } from './components/reports/reports';
   standalone: true,
   imports: [
     CommonModule,
-    LoginComponent,
     HeaderComponent,
     NavigationComponent,
     BooksListComponent,
